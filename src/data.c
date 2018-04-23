@@ -104,7 +104,7 @@ matrix load_image_paths(char **paths, int n, int w, int h)
     return X;
 }
 
-matrix load_image_augment_paths(char **paths, int n, int flip, int min, int max, int size, float angle, float aspect, float hue, float saturation, float exposure)
+matrix load_image_augment_paths(char **paths, int n, int use_flip, int min, int max, int size, float angle, float aspect, float hue, float saturation, float exposure)
 {
     int i;
     matrix X;
@@ -115,12 +115,9 @@ matrix load_image_augment_paths(char **paths, int n, int flip, int min, int max,
     for(i = 0; i < n; ++i){
         image im = load_image_color(paths[i], 0, 0);
         image crop = random_augment_image(im, angle, aspect, min, max, size);
+        int flip = use_flip ? random_gen() % 2 : 0;
         if (flip)
-        {
-            flip = random_gen() % 2;
-            if (flip)
-                flip_image(crop);
-        }
+            flip_image(crop);
         random_distort_image(crop, hue, saturation, exposure);
 
         /*
@@ -689,7 +686,7 @@ data load_data_swag(char **paths, int n, int classes, float jitter)
 
 #include "http_stream.h"
 
-data load_data_detection(int n, char **paths, int m, int w, int h, int boxes, int classes, int flip, float jitter, float hue, float saturation, float exposure, int small_object)
+data load_data_detection(int n, char **paths, int m, int w, int h, int boxes, int classes, int use_flip, float jitter, float hue, float saturation, float exposure, int small_object)
 {
     char **random_paths = get_random_paths(paths, n, m);
     int i;
@@ -733,8 +730,7 @@ data load_data_detection(int n, char **paths, int m, int w, int h, int boxes, in
         float sx = (float)swidth  / ow;
         float sy = (float)sheight / oh;
 
-        if (flip)
-            flip = random_gen()%2;
+        int flip = use_flip ? random_gen()%2 : 0;
 
         float dx = ((float)pleft/ow)/sx;
         float dy = ((float)ptop /oh)/sy;
@@ -757,7 +753,7 @@ data load_data_detection(int n, char **paths, int m, int w, int h, int boxes, in
     return d;
 }
 #else	// OPENCV
-data load_data_detection(int n, char **paths, int m, int w, int h, int boxes, int classes, int flip, float jitter, float hue, float saturation, float exposure, int small_object)
+data load_data_detection(int n, char **paths, int m, int w, int h, int boxes, int classes, int use_flip, float jitter, float hue, float saturation, float exposure, int small_object)
 {
 	char **random_paths = get_random_paths(paths, n, m);
 	int i;
@@ -789,8 +785,7 @@ data load_data_detection(int n, char **paths, int m, int w, int h, int boxes, in
 		float sx = (float)swidth / ow;
 		float sy = (float)sheight / oh;
 
-		if (flip)
-			flip = random_gen() % 2;
+		int flip = use_flip ? random_gen() % 2 : 0;
 		image cropped = crop_image(orig, pleft, ptop, swidth, sheight);
 
 		float dx = ((float)pleft / ow) / sx;
@@ -967,25 +962,25 @@ data load_data_super(char **paths, int n, int m, int w, int h, int scale)
     return d;
 }
 
-data load_data_augment(char **paths, int n, int m, char **labels, int k, tree *hierarchy, int flip, int min, int max, int size, float angle, float aspect, float hue, float saturation, float exposure)
+data load_data_augment(char **paths, int n, int m, char **labels, int k, tree *hierarchy, int use_flip, int min, int max, int size, float angle, float aspect, float hue, float saturation, float exposure)
 {
     if(m) paths = get_random_paths(paths, n, m);
     data d = {0};
     d.shallow = 0;
-    d.X = load_image_augment_paths(paths, n, flip, min, max, size, angle, aspect, hue, saturation, exposure);
+    d.X = load_image_augment_paths(paths, n, use_flip, min, max, size, angle, aspect, hue, saturation, exposure);
     d.y = load_labels_paths(paths, n, labels, k, hierarchy);
     if(m) free(paths);
     return d;
 }
 
-data load_data_tag(char **paths, int n, int m, int k, int flip, int min, int max, int size, float angle, float aspect, float hue, float saturation, float exposure)
+data load_data_tag(char **paths, int n, int m, int k, int use_flip, int min, int max, int size, float angle, float aspect, float hue, float saturation, float exposure)
 {
     if(m) paths = get_random_paths(paths, n, m);
     data d = {0};
     d.w = size;
     d.h = size;
     d.shallow = 0;
-    d.X = load_image_augment_paths(paths, n, flip, min, max, size, angle, aspect, hue, saturation, exposure);
+    d.X = load_image_augment_paths(paths, n, use_flip, min, max, size, angle, aspect, hue, saturation, exposure);
     d.y = load_tags_paths(paths, n, k);
     if(m) free(paths);
     return d;
