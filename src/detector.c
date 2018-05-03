@@ -645,6 +645,8 @@ void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float
 				truth_dif = read_boxes(labelpath_dif, &num_labels_dif);
 			}
 
+			const int checkpoint_detections_count = detections_count;
+
 			for (i = 0; i < nboxes; ++i) {
 
 				int class_id;
@@ -695,7 +697,13 @@ void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float
 
 						// calc avg IoU, true-positives, false-positives for required Threshold
 						if (prob > thresh_calc_avg_iou) {
-							if (truth_index > -1) {
+							int z, found = 0;
+							for (z = checkpoint_detections_count; z < detections_count-1; ++z)
+								if (detections[z].unique_truth_index == truth_index) {
+									found = 1; break;
+								}
+
+							if(truth_index > -1 && found == 0) {
 								avg_iou += max_iou;
 								++tp_for_thresh;
 							}
@@ -715,7 +723,8 @@ void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float
 		}
 	}
 
-	avg_iou = avg_iou / (tp_for_thresh + fp_for_thresh);
+	if((tp_for_thresh + fp_for_thresh) > 0)
+		avg_iou = avg_iou / (tp_for_thresh + fp_for_thresh);
 
 	
 	// SORT(detections)
@@ -1049,7 +1058,8 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     while(1){
         if(filename){
             strncpy(input, filename, 256);
-			if (input[strlen(input) - 1] == 0x0d) input[strlen(input) - 1] = 0;
+			if(strlen(input) > 0)
+				if (input[strlen(input) - 1] == 0x0d) input[strlen(input) - 1] = 0;
         } else {
             printf("Enter Image Path: ");
             fflush(stdout);
@@ -1059,8 +1069,8 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         }
         image im = load_image_color(input,0,0);
 		int letterbox = 0;
-        image sized = resize_image(im, net.w, net.h);
-		//image sized = letterbox_image(im, net.w, net.h); letterbox = 1;
+        //image sized = resize_image(im, net.w, net.h);
+		image sized = letterbox_image(im, net.w, net.h); letterbox = 1;
         layer l = net.layers[net.n-1];
 
         //box *boxes = calloc(l.w*l.h*l.n, sizeof(box));
@@ -1069,8 +1079,8 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 
         float *X = sized.data;
         time= what_time_is_it_now();
-        //network_predict(net, X);
-		network_predict_image(&net, im); letterbox = 1;
+        network_predict(net, X);
+		//network_predict_image(&net, im); letterbox = 1;
         printf("%s: Predicted in %f seconds.\n", input, (what_time_is_it_now()-time));
         //get_region_boxes(l, 1, 1, thresh, probs, boxes, 0, 0);
 		// if (nms) do_nms_sort_v2(boxes, probs, l.w*l.h*l.n, l.classes, nms);
@@ -1147,7 +1157,8 @@ void run_detector(int argc, char **argv)
     char *cfg = argv[4];
     char *weights = (argc > 5) ? argv[5] : 0;
 	if(weights)
-		if (weights[strlen(weights) - 1] == 0x0d) weights[strlen(weights) - 1] = 0;
+		if(strlen(weights) > 0)
+			if (weights[strlen(weights) - 1] == 0x0d) weights[strlen(weights) - 1] = 0;
     char *filename = (argc > 6) ? argv[6]: 0;
     if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, dont_show);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear, dont_show);
@@ -1161,7 +1172,8 @@ void run_detector(int argc, char **argv)
         char *name_list = option_find_str(options, "names", "data/names.list");
         char **names = get_labels(name_list);
 		if(filename)
-			if (filename[strlen(filename) - 1] == 0x0d) filename[strlen(filename) - 1] = 0;
+			if(strlen(filename) > 0)
+				if (filename[strlen(filename) - 1] == 0x0d) filename[strlen(filename) - 1] = 0;
         demo(cfg, weights, thresh, hier_thresh, cam_index, filename, names, classes, frame_skip, prefix, out_filename,
 			http_stream_port, dont_show);
     }
