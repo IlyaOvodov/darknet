@@ -414,7 +414,7 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 	fprintf(stderr, "Total Detection Time: %f Seconds\n", time(0) - start);
 }
 
-void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile)
+void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, float prob_thresh)
 {
 	network net = parse_network_cfg_custom(cfgfile, 1);	// set batch=1
 	if (weightfile) {
@@ -432,21 +432,25 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile)
 
 	layer l = net.layers[net.n - 1];
 
-	int j, k;
-
 	int m = plist->size;
-	int i = 0;
 
-	float thresh = .001;
+	float thresh = .001; // threshold on objectness, while prob_thresh if threshold on prob for object best class
 	float iou_thresh = .5;
 	float nms = .4;
 
-	int total = 0;
-	int correct = 0;
-	int proposals = 0;
-	float avg_iou = 0;
+	int total = 0;         // total labels number
+	int correct = 0;       // total labels fit by proposals with IOU > iou_thresh
+	int correct_class = 0; // total labels fit by proposals with IOU > iou_thresh and correct best_class
+	int proposals = 0;               // total proposals with objectness > thresh
+	int proposals_class = 0;         // total proposals with best class defined (prob > prob_thresh)
+	int proposals_correct = 0;       // total proposals fit labels with IOU > iou_thresh
+	int proposals_correct_class = 0; // total proposals fit labels with IOU > iou_thresh and correct best_class
+	float avg_iou = 0;       // sum of IOU by labels fit with best fitting proposal
+	float avg_iou_class = 0; // sum of IOU by labels fit with best fitting proposal with correct class
+	float proposals_avg_iou = 0;       // sum of IOU by proposals fit with best fitting label
+	float proposals_avg_iou_class = 0; // sum of IOU by proposals fit with best fitting label with correct class
 
-	for (i = 0; i < m; ++i) {
+	for (int i = 0; i < m; ++i) {
 		char *path = paths[i];
 		image orig = load_image_color(path, 0, 0);
 		image sized = resize_image(orig, net.w, net.h);
@@ -468,28 +472,96 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile)
 
 		int num_labels = 0;
 		box_label *truth = read_boxes(labelpath, &num_labels);
-		for (k = 0; k < nboxes; ++k) {
+		for (int k = 0; k < nboxes; ++k) {
 			if (dets[k].objectness > thresh) {
 				++proposals;
+				// fill best_class for dets
+				dets[k].best_class = -1;
+				for (int j = 0; j < dets[k].classes; ++j) {
+					if ((dets[k].prob[j] > prob_thresh) && (dets[k].best_class < 0 || dets[k].prob[dets[k].best_class] < dets[k].prob[j])) {
+						dets[k].best_class = j;
+					}
+				}
+				if (dets[k].best_class >= 0)
+					++proposals_class;
+
+				float best_iou = 0;
+				float best_iou_class = 0;
+				for (int j = 0; j < num_labels; ++j) {
+					box t = { truth[j].x, truth[j].y, truth[j].w, truth[j].h };
+					float iou = box_iou(dets[k].bbox, t);
+					if (dets[k].objectness > thresh && iou > best_iou) {
+						best_iou = iou;
+					}
+					if (dets[k].objectness > thresh && iou > best_iou_class && dets[k].best_class == truth[j].id) {
+						best_iou_class = iou;
+					}
+				}
+				proposals_avg_iou += best_iou;
+				if (best_iou > iou_thresh) {
+					++proposals_correct;
+				}
+				proposals_avg_iou_class += best_iou_class;
+				if (best_iou_class > iou_thresh) {
+					++proposals_correct_class;
+				}
+
 			}
 		}
-		for (j = 0; j < num_labels; ++j) {
+		for (int j = 0; j < num_labels; ++j) {
 			++total;
 			box t = { truth[j].x, truth[j].y, truth[j].w, truth[j].h };
 			float best_iou = 0;
-			for (k = 0; k < nboxes; ++k) {
+			float best_iou_class = 0;
+			for (int k = 0; k < nboxes; ++k) {
 				float iou = box_iou(dets[k].bbox, t);
 				if (dets[k].objectness > thresh && iou > best_iou) {
 					best_iou = iou;
+				}
+				if (dets[k].objectness > thresh && iou > best_iou_class && dets[k].best_class == truth[j].id) {
+					best_iou_class = iou;
 				}
 			}
 			avg_iou += best_iou;
 			if (best_iou > iou_thresh) {
 				++correct;
 			}
+			avg_iou_class += best_iou_class;
+			if (best_iou_class > iou_thresh) {
+				++correct_class;
+			}
+		}
+
+		if (i % 100 == 0 || i == m-1) {
+			// reprint header
+			fprintf(stderr, "\n");
+			fprintf(stderr, "                               "
+				"   Labels   Labels(fit class)  "
+				"Propososals  "
+				"Propososals(fit class)  "
+				"Propososals(fit class)/(Propososals with class)"
+				"\n");
+			fprintf(stderr, "Image Correct  Labels RPs/Img  "
+				"IOU,%% Recall  IOU,%% Recall   "
+				"IOU,%% Precision  "
+				"IOU,%% Precision       "
+				"IOU,%% Precision"
+				"\n");
 		}
 		//fprintf(stderr, " %s - %s - ", paths[i], labelpath);
-		fprintf(stderr, "%5d %5d %5d\tRPs/Img: %.2f\tIOU: %.2f%%\tRecall:%.2f%%\n", i, correct, total, (float)proposals / (i + 1), avg_iou * 100 / total, 100.*correct / total);
+		fprintf(stderr,
+			"%5d %7d %7d %7.2f  "
+			"%5.2f %5.2f   %5.2f %5.2f    "
+			"%5.2f %5.2f      "
+			"%5.2f %5.2f           "
+			"%5.2f %5.2f"
+			"\n",
+			i, correct, total, (float)proposals / (i + 1),
+			avg_iou * 100 / total, 100.*correct / total, avg_iou_class * 100 / total, 100.*correct_class / total,
+			proposals_avg_iou * 100 / proposals, 100.*proposals_correct / proposals,
+			proposals_avg_iou_class * 100 / proposals, 100.*correct_class / proposals,
+			proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class
+			);
 		free(id);
 		free_image(orig);
 		free_image(sized);
@@ -1117,7 +1189,7 @@ void run_detector(int argc, char **argv)
 	char *out_filename = find_char_arg(argc, argv, "-out_filename", 0);
 	char *outfile = find_char_arg(argc, argv, "-out", 0);
     char *prefix = find_char_arg(argc, argv, "-prefix", 0);
-    float thresh = find_float_arg(argc, argv, "-thresh", .25);	// 0.24
+    float thresh = find_float_arg(argc, argv, "-thresh", -1);	// 0.25 is default for test_detector, validate_detector_map and demo
 	float hier_thresh = find_float_arg(argc, argv, "-hier", .5);
     int cam_index = find_int_arg(argc, argv, "-c", 0);
     int frame_skip = find_int_arg(argc, argv, "-s", 0);
@@ -1160,11 +1232,11 @@ void run_detector(int argc, char **argv)
 		if(strlen(weights) > 0)
 			if (weights[strlen(weights) - 1] == 0x0d) weights[strlen(weights) - 1] = 0;
     char *filename = (argc > 6) ? argv[6]: 0;
-    if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, dont_show);
+	if (0 == strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh >= 0 ? thresh : 0.25, hier_thresh, dont_show);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear, dont_show);
     else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
-    else if(0==strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights);
-	else if(0==strcmp(argv[2], "map")) validate_detector_map(datacfg, cfg, weights, thresh);
+    else if(0==strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights, thresh);
+	else if(0==strcmp(argv[2], "map")) validate_detector_map(datacfg, cfg, weights, thresh >= 0 ? thresh : 0.25);
 	else if(0==strcmp(argv[2], "calc_anchors")) calc_anchors(datacfg, num_of_clusters, width, height, show);
     else if(0==strcmp(argv[2], "demo")) {
         list *options = read_data_cfg(datacfg);
@@ -1174,7 +1246,7 @@ void run_detector(int argc, char **argv)
 		if(filename)
 			if(strlen(filename) > 0)
 				if (filename[strlen(filename) - 1] == 0x0d) filename[strlen(filename) - 1] = 0;
-        demo(cfg, weights, thresh, hier_thresh, cam_index, filename, names, classes, frame_skip, prefix, out_filename,
+        demo(cfg, weights, thresh >= 0 ? thresh : 0.25, hier_thresh, cam_index, filename, names, classes, frame_skip, prefix, out_filename,
 			http_stream_port, dont_show);
     }
 	else printf(" There isn't such command: %s", argv[2]);
