@@ -414,7 +414,7 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 	fprintf(stderr, "Total Detection Time: %f Seconds\n", time(0) - start);
 }
 
-void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, float prob_thresh)
+void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, float prob_thresh, int ext_output)
 {
 	network net = parse_network_cfg_custom(cfgfile, 1);	// set batch=1
 	if (weightfile) {
@@ -460,6 +460,8 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 		int letterbox = 0;
 		detection *dets = get_network_boxes(&net, sized.w, sized.h, thresh, .5, 0, 1, &nboxes, letterbox);
 		if (nms) do_nms_obj(dets, nboxes, 1, nms);
+		int selected_detections_num;
+		detection_with_class* selected_detections = get_actual_detections(dets, nboxes, -1 /*no threshould*/, &selected_detections_num);
 
 		char labelpath[4096];
 		find_replace(path, "images", "labels", labelpath);
@@ -472,28 +474,30 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 
 		int num_labels = 0;
 		box_label *truth = read_boxes(labelpath, &num_labels);
-		for (int k = 0; k < nboxes; ++k) {
-			if (dets[k].objectness > thresh) {
+		for (int k = 0; k < selected_detections_num; ++k) {
+			const detection* det_k = &(selected_detections[k].det);
+			int* best_class_k = &(selected_detections[k].best_class);
+			if (det_k->objectness > thresh) {
 				++proposals;
 				// fill best_class for dets
-				dets[k].best_class = -1;
-				for (int j = 0; j < dets[k].classes; ++j) {
-					if ((dets[k].prob[j] > prob_thresh) && (dets[k].best_class < 0 || dets[k].prob[dets[k].best_class] < dets[k].prob[j])) {
-						dets[k].best_class = j;
+				*best_class_k = -1;
+				for (int j = 0; j < det_k->classes; ++j) {
+					if ((det_k->prob[j] > prob_thresh) && (*best_class_k < 0 || det_k->prob[*best_class_k] < det_k->prob[j])) {
+						*best_class_k = j;
 					}
 				}
-				if (dets[k].best_class >= 0)
+				if (*best_class_k >= 0)
 					++proposals_class;
 
 				float best_iou = 0;
 				float best_iou_class = 0;
 				for (int j = 0; j < num_labels; ++j) {
 					box t = { truth[j].x, truth[j].y, truth[j].w, truth[j].h };
-					float iou = box_iou(dets[k].bbox, t);
-					if (dets[k].objectness > thresh && iou > best_iou) {
+					float iou = box_iou(det_k->bbox, t);
+					if (det_k->objectness > thresh && iou > best_iou) {
 						best_iou = iou;
 					}
-					if (dets[k].objectness > thresh && iou > best_iou_class && dets[k].best_class == truth[j].id) {
+					if (det_k->objectness > thresh && iou > best_iou_class && *best_class_k == truth[j].id) {
 						best_iou_class = iou;
 					}
 				}
@@ -513,12 +517,14 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 			box t = { truth[j].x, truth[j].y, truth[j].w, truth[j].h };
 			float best_iou = 0;
 			float best_iou_class = 0;
-			for (int k = 0; k < nboxes; ++k) {
-				float iou = box_iou(dets[k].bbox, t);
-				if (dets[k].objectness > thresh && iou > best_iou) {
+			for (int k = 0; k < selected_detections_num; ++k) {
+				const detection* det_k = &(selected_detections[k].det);
+				int* best_class_k = &(selected_detections[k].best_class);
+				float iou = box_iou(det_k->bbox, t);
+				if (det_k->objectness > thresh && iou > best_iou) {
 					best_iou = iou;
 				}
-				if (dets[k].objectness > thresh && iou > best_iou_class && dets[k].best_class == truth[j].id) {
+				if (det_k->objectness > thresh && iou > best_iou_class && *best_class_k == truth[j].id) {
 					best_iou_class = iou;
 				}
 			}
@@ -532,7 +538,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 			}
 		}
 
-		if (i % 100 == 0 || i == m-1) {
+		if (ext_output && (i % 100 == 0 || i == m-1)) {
 			// reprint header
 			fprintf(stderr, "\n");
 			fprintf(stderr, "                               "
@@ -548,20 +554,29 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 				"IOU,%% Precision"
 				"\n");
 		}
-		//fprintf(stderr, " %s - %s - ", paths[i], labelpath);
-		fprintf(stderr,
-			"%5d %7d %7d %7.2f  "
-			"%5.2f %5.2f   %5.2f %5.2f    "
-			"%5.2f %5.2f      "
-			"%5.2f %5.2f           "
-			"%5.2f %5.2f"
-			"\n",
-			i, correct, total, (float)proposals / (i + 1),
-			avg_iou * 100 / total, 100.*correct / total, avg_iou_class * 100 / total, 100.*correct_class / total,
-			proposals_avg_iou * 100 / proposals, 100.*proposals_correct / proposals,
-			proposals_avg_iou_class * 100 / proposals, 100.*correct_class / proposals,
-			proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class
-			);
+		if (ext_output)
+		{
+			fprintf(stderr,
+				"%5d %7d %7d %7.2f  "
+				"%5.2f %5.2f   %5.2f %5.2f    "
+				"%5.2f %5.2f      "
+				"%5.2f %5.2f           "
+				"%5.2f %5.2f"
+				"\n",
+				i, correct, total, (float)proposals / (i + 1),
+				avg_iou * 100 / total, 100.*correct / total, avg_iou_class * 100 / total, 100.*correct_class / total,
+				proposals_avg_iou * 100 / proposals, 100.*proposals_correct / proposals,
+				proposals_avg_iou_class * 100 / proposals, 100.*correct_class / proposals,
+				proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class
+				);
+		}
+		else
+		{
+			// old-style output
+			//fprintf(stderr, " %s - %s - ", paths[i], labelpath);
+			fprintf(stderr, "%5d %5d %5d\tRPs/Img: %.2f\tIOU: %.2f%%\tRecall:%.2f%%\n", i, correct, total, (float)proposals / (i + 1), avg_iou * 100 / total, 100.*correct / total);
+		}
+		free(selected_detections);
 		free(id);
 		free_image(orig);
 		free_image(sized);
@@ -1239,7 +1254,7 @@ void run_detector(int argc, char **argv)
 	if (0 == strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh >= 0 ? thresh : 0.25, hier_thresh, dont_show, ext_output);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear, dont_show);
     else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
-    else if(0==strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights, thresh);
+    else if(0==strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights, thresh, ext_output);
 	else if(0==strcmp(argv[2], "map")) validate_detector_map(datacfg, cfg, weights, thresh >= 0 ? thresh : 0.25);
 	else if(0==strcmp(argv[2], "calc_anchors")) calc_anchors(datacfg, num_of_clusters, width, height, show);
     else if(0==strcmp(argv[2], "demo")) {
