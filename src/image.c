@@ -13,6 +13,7 @@
 #ifdef OPENCV
 #include "opencv2/highgui/highgui_c.h"
 #include "opencv2/imgproc/imgproc_c.h"
+#include "opencv2/core/types_c.h"
 #include "opencv2/core/version.hpp"
 #ifndef CV_VERSION_EPOCH
 #include "opencv2/videoio/videoio_c.h"
@@ -236,10 +237,12 @@ detection_with_class* get_actual_detections(detection *dets, int dets_num, float
 {
 	int selected_num = 0;
 	detection_with_class* result_arr = calloc(dets_num, sizeof(detection_with_class));
-	for (int i = 0; i < dets_num; ++i) {
+	int i;
+	for (i = 0; i < dets_num; ++i) {
 		int best_class = -1;
 		float best_class_prob = thresh;
-		for (int j = 0; j < dets[i].classes; ++j) {
+		int j;
+		for (j = 0; j < dets[i].classes; ++j) {
 			if (dets[i].prob[j] > best_class_prob ) {
 				best_class = j;
 				best_class_prob = dets[i].prob[j];
@@ -279,17 +282,19 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 
 	// text output
 	qsort(selected_detections, selected_detections_num, sizeof(*selected_detections), compare_by_lefts);
-	for (int i = 0; i < selected_detections_num; ++i) {
+	int i;
+	for (i = 0; i < selected_detections_num; ++i) {
 		const int best_class = selected_detections[i].best_class;
 		printf("%s: %.0f%%", names[best_class],	selected_detections[i].det.prob[best_class] * 100);
 		if (ext_output)
-			printf("\t(left: %.0f\ttop: %.0f\tw: %0.f\th: %0.f)\n",
+			printf("\t(left: %.0f \ttop: %.0f \tw: %0.f \th: %0.f)\n",
 				(selected_detections[i].det.bbox.x - selected_detections[i].det.bbox.w / 2)*im.w,
 				(selected_detections[i].det.bbox.y - selected_detections[i].det.bbox.h / 2)*im.h,
 				selected_detections[i].det.bbox.w*im.w, selected_detections[i].det.bbox.h*im.h);
 		else
 			printf("\n");
-		for (int j = 0; j < classes; ++j) {
+		int j;
+		for (j = 0; j < classes; ++j) {
 			if (selected_detections[i].det.prob[j] > thresh && j != best_class) {
 				printf("%s: %.0f%%\n", names[j], selected_detections[i].det.prob[j] * 100);
 			}
@@ -298,7 +303,7 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 
 	// image output
 	qsort(selected_detections, selected_detections_num, sizeof(*selected_detections), compare_by_probs);
-	for (int i = 0; i < selected_detections_num; ++i) {
+	for (i = 0; i < selected_detections_num; ++i) {
 			int width = im.h * .006;
 			if (width < 1)
 				width = 1;
@@ -345,7 +350,8 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 			if (alphabet) {
 				char labelstr[4096] = { 0 };
 				strcat(labelstr, names[selected_detections[i].best_class]);
-				for (int j = 0; j < classes; ++j) {
+				int j;
+				for (j = 0; j < classes; ++j) {
 					if (selected_detections[i].det.prob[j] > thresh && j != selected_detections[i].best_class) {
 						strcat(labelstr, ", ");
 						strcat(labelstr, names[j]);
@@ -961,19 +967,31 @@ image get_image_from_stream(CvCapture *cap)
     return im;
 }
 
-image get_image_from_stream_resize(CvCapture *cap, int w, int h, IplImage** in_img, int use_webcam)
+image get_image_from_stream_resize(CvCapture *cap, int w, int h, IplImage** in_img, int cpp_video_capture)
 {
 	IplImage* src;
-	if (use_webcam) src = get_webcam_frame(cap);
+	if (cpp_video_capture) {
+		static int once = 1;
+		if (once) {
+			once = 0;
+			do {
+				src = get_webcam_frame(cap);
+				if (!src) return make_empty_image(0, 0, 0);
+			} while (src->width < 1 || src->height < 1 || src->nChannels < 1);
+		} else
+			src = get_webcam_frame(cap);
+	}
 	else src = cvQueryFrame(cap);
 
 	if (!src) return make_empty_image(0, 0, 0);
+	if (src->width < 1 || src->height < 1 || src->nChannels < 1) return make_empty_image(0, 0, 0);
 	IplImage* new_img = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, 3);
 	*in_img = cvCreateImage(cvSize(src->width, src->height), IPL_DEPTH_8U, 3);
 	cvResize(src, *in_img, CV_INTER_LINEAR);
 	cvResize(src, new_img, CV_INTER_LINEAR);
 	image im = ipl_to_image(new_img);
 	cvReleaseImage(&new_img);
+	if (cpp_video_capture) cvReleaseImage(&src);
 	rgbgr_image(im);
 	return im;
 }
@@ -1673,7 +1691,7 @@ image load_image_stb(char *filename, int channels)
     unsigned char *data = stbi_load(filename, &w, &h, &c, channels);
     if (!data) {
         fprintf(stderr, "Cannot load image \"%s\"\nSTB Reason: %s\n", filename, stbi_failure_reason());
-        exit(0);
+        exit(1);
     }
     if(channels) c = channels;
     int i,j,k;
