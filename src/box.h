@@ -58,5 +58,8 @@ box encode_box(box b, box anchor);
 // Creates array of detections with prob > thresh and fills best_class for them
 // Return number of selected detections in *selected_detections_num
 detection_with_class* get_actual_detections(detection *dets, int dets_num, float thresh, int* selected_detections_num);
-
+// compare to sort detection** by bbox.x
+int compare_by_lefts(const void *a_ptr, const void *b_ptr);
+// compare to sort detection** by best_class probability 
+int compare_by_probs(const void *a_ptr, const void *b_ptr);
 #endif

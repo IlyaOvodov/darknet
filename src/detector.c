@@ -273,6 +273,34 @@ void print_detector_detections(FILE **fps, char *id, detection *dets, int total,
 	}
 }
 
+void print_custom_detections(FILE *fps, char *id, detection *dets, int total, float thresh, int w, int h)
+{
+	int selected_detections_num;
+	detection_with_class* selected_detections = get_actual_detections(dets, total, thresh, &selected_detections_num);
+
+	qsort(selected_detections, selected_detections_num, sizeof(*selected_detections), compare_by_lefts);
+
+	for (int i = 0; i < selected_detections_num; ++i) {
+		const detection det_i = selected_detections[i].det;
+		const int best_class = selected_detections[i].best_class;
+		if (best_class >= 0) {
+			float xmin = det_i.bbox.x - det_i.bbox.w / 2.;
+			float xmax = det_i.bbox.x + det_i.bbox.w / 2.;
+			float ymin = det_i.bbox.y - det_i.bbox.h / 2.;
+			float ymax = det_i.bbox.y + det_i.bbox.h / 2.;
+
+			if (xmin < 1) xmin = 0;
+			if (ymin < 1) ymin = 0;
+			if (xmax > w) xmax = w - 1;
+			if (ymax > h) ymax = h - 1;
+
+			fprintf(fps, "%s %i %f %f %f %f %f\n", id, best_class,
+					det_i.prob[best_class], xmin, ymin, xmax, ymax);
+		}
+	}
+	free(selected_detections);
+}
+
 void print_imagenet_detections(FILE *fp, int id, detection *dets, int total, int classes, int w, int h)
 {
 	int i, j;
@@ -295,7 +323,7 @@ void print_imagenet_detections(FILE *fp, int id, detection *dets, int total, int
 	}
 }
 
-void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *outfile)
+void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *outfile, float thresh)
 {
 	int j;
 	list *options = read_data_cfg(datacfg);
@@ -325,21 +353,28 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 	char *type = option_find_str(options, "eval", "voc");
 	FILE *fp = 0;
 	FILE **fps = 0;
-	int coco = 0;
-	int imagenet = 0;
+
+	enum { VOC, COCO, IMAGENET, CUSTOM };
+	int detector_mode = VOC;
 	if (0 == strcmp(type, "coco")) {
 		if (!outfile) outfile = "coco_results";
 		snprintf(buff, 1024, "%s/%s.json", prefix, outfile);
 		fp = fopen(buff, "w");
 		fprintf(fp, "[\n");
-		coco = 1;
+		detector_mode = COCO;
 	}
 	else if (0 == strcmp(type, "imagenet")) {
 		if (!outfile) outfile = "imagenet-detection";
 		snprintf(buff, 1024, "%s/%s.txt", prefix, outfile);
 		fp = fopen(buff, "w");
-		imagenet = 1;
+		detector_mode = IMAGENET;
 		classes = 200;
+	}
+	else if (0 == strcmp(type, "custom")) {
+		if (!outfile) outfile = "detection_results";
+		snprintf(buff, 1024, "%s/%s.txt", prefix, outfile);
+		fp = fopen(buff, "w");
+		detector_mode = CUSTOM;
 	}
 	else {
 		if (!outfile) outfile = "comp4_det_test_";
@@ -355,7 +390,6 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 	int i = 0;
 	int t;
 
-	float thresh = .005;
 	float nms = .45;
 
 	int nthreads = 4;
@@ -372,6 +406,12 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 	//args.type = LETTERBOX_DATA;
 
 	for (t = 0; t < nthreads; ++t) {
+		if (t >= m)
+		{
+			nthreads = t;
+			break;
+		}
+
 		args.path = paths[i + t];
 		args.im = &buf[t];
 		args.resized = &buf_resized[t];
@@ -392,7 +432,10 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 			thr[t] = load_data_in_thread(args);
 		}
 		for (t = 0; t < nthreads && i + t - nthreads < m; ++t) {
-			char *path = paths[i + t - nthreads];
+			int img_index = i + t - nthreads;
+			if (img_index % 10000 == 0)
+				fprintf(stderr, "processing image: %i\n", img_index);
+			char *path = paths[img_index];
 			char *id = basecfg(path);
 			float *X = val_resized[t].data;
 			network_predict(net, X);
@@ -402,11 +445,14 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 			int letterbox = (args.type == LETTERBOX_DATA);
 			detection *dets = get_network_boxes(&net, w, h, thresh, .5, map, 0, &nboxes, letterbox);
 			if (nms) do_nms_sort(dets, nboxes, classes, nms);
-			if (coco) {
+			if (detector_mode == COCO) {
 				print_cocos(fp, path, dets, nboxes, classes, w, h);
 			}
-			else if (imagenet) {
-				print_imagenet_detections(fp, i + t - nthreads + 1, dets, nboxes, classes, w, h);
+			else if (detector_mode == IMAGENET) {
+				print_imagenet_detections(fp, img_index + 1, dets, nboxes, classes, w, h);
+			}
+			else if (detector_mode == CUSTOM) {
+				print_custom_detections(fp, path, dets, nboxes, thresh, w, h);
 			}
 			else {
 				print_detector_detections(fps, id, dets, nboxes, classes, w, h);
@@ -420,7 +466,7 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 	for (j = 0; j < classes; ++j) {
 		if (fps) fclose(fps[j]);
 	}
-	if (coco) {
+	if (detector_mode == COCO) {
 		fseek(fp, -2, SEEK_CUR);
 		fprintf(fp, "\n]\n");
 		fclose(fp);
@@ -1283,7 +1329,7 @@ void run_detector(int argc, char **argv)
     char *filename = (argc > 6) ? argv[6]: 0;
 	if (0 == strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh >= 0 ? thresh : 0.25, hier_thresh, dont_show, ext_output);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear, dont_show);
-    else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
+    else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile, thresh >= 0 ? thresh : .005);
     else if(0==strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights, thresh, ext_output);
 	else if(0==strcmp(argv[2], "map")) validate_detector_map(datacfg, cfg, weights, thresh >= 0 ? thresh : 0.25);
 	else if(0==strcmp(argv[2], "calc_anchors")) calc_anchors(datacfg, num_of_clusters, width, height, show);
