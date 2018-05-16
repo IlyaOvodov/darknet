@@ -48,11 +48,11 @@ public:
 	float nms = .4;
 	bool wait_stream;
 
-	YOLODLL_API Detector(std::string cfg_filename, std::string weight_filename, int gpu_id = 0);
+	YOLODLL_API Detector(std::string cfg_filename, std::string weight_filename, int &net_classes, int gpu_id = 0);
 	YOLODLL_API ~Detector();
 
 	YOLODLL_API std::vector<bbox_t> detect(std::string image_filename, float thresh = 0.2, bool use_mean = false);
-	YOLODLL_API std::vector<bbox_t> detect(image_t img, float thresh = 0.2, bool use_mean = false);
+	YOLODLL_API std::vector<bbox_t> detect(image_t img, std::vector<float> &copy_probs, float thresh = 0.2, bool use_mean = false);
 	static YOLODLL_API image_t load_image(std::string image_filename);
 	static YOLODLL_API void free_image(image_t m);
 	YOLODLL_API int get_net_width() const;
@@ -65,7 +65,8 @@ public:
 	{
 		if (img.data == NULL)
 			throw std::runtime_error("Image is empty");
-		auto detection_boxes = detect(img, thresh, use_mean);
+		std::vector<float> copy_probs;
+		auto detection_boxes = detect(img, copy_probs, thresh, use_mean);
 		float wk = (float)init_w / img.w, hk = (float)init_h / img.h;
 		for (auto &i : detection_boxes) i.x *= wk, i.w *= wk, i.y *= hk, i.h *= hk;
 		return detection_boxes;

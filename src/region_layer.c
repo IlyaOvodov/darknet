@@ -360,7 +360,7 @@ void backward_region_layer(const region_layer l, network_state state)
     axpy_cpu(l.batch*l.inputs, 1, l.delta, 1, state.delta, 1);
 }
 
-void get_region_boxes(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness, int *map)
+void get_region_boxes(layer l, int w, int h, float thresh, float **probs, box *boxes, int only_objectness, int *map, float* source_probs)
 {
     int i,j,n;
     float *predictions = l.output;
@@ -388,6 +388,8 @@ void get_region_boxes(layer l, int w, int h, float thresh, float **probs, box *b
                     for(j = 0; j < 200; ++j){
                         float prob = scale*predictions[class_index+map[j]];
                         probs[index][j] = (prob > thresh) ? prob : 0;
+						if (source_probs)
+							source_probs[index*l.classes + j] = prob;
                     }
                 } else {
                     for(j = l.classes - 1; j >= 0; --j){
@@ -398,12 +400,16 @@ void get_region_boxes(layer l, int w, int h, float thresh, float **probs, box *b
                         }
                         float prob = predictions[class_index+j];
                         probs[index][j] = (scale > thresh) ? prob : 0;
+						if (source_probs)
+							source_probs[index*l.classes + j] = prob;
                     }
                 }
             } else {
                 for(j = 0; j < l.classes; ++j){
                     float prob = scale*predictions[class_index+j];
                     probs[index][j] = (prob > thresh) ? prob : 0;
+					if (source_probs)
+						source_probs[index*l.classes + j] = prob;
                 }
             }
             if(only_objectness){

@@ -97,7 +97,7 @@ void *detect_in_thread(void *ptr)
 	*/
 	int letter = 0;
 	int nboxes = 0;
-	detection *dets = get_network_boxes(&net, det_s.w, det_s.h, demo_thresh, demo_thresh, 0, 1, &nboxes, letter);
+	detection *dets = get_network_boxes(&net, det_s.w, det_s.h, demo_thresh, demo_thresh, 0, 1, &nboxes, letter, 0);
 	if (nms) do_nms_obj(dets, nboxes, l.classes, nms);
 
     printf("\033[2J");

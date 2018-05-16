@@ -40,7 +40,7 @@ struct detector_gpu_t {
 	unsigned int *track_id;
 };
 
-YOLODLL_API Detector::Detector(std::string cfg_filename, std::string weight_filename, int gpu_id) : cur_gpu_id(gpu_id)
+YOLODLL_API Detector::Detector(std::string cfg_filename, std::string weight_filename, int &net_classes, int gpu_id) : cur_gpu_id(gpu_id)
 {
 	wait_stream = 0;
 	int old_gpu_index;
@@ -72,6 +72,7 @@ YOLODLL_API Detector::Detector(std::string cfg_filename, std::string weight_file
 	fuse_conv_batchnorm(net);
 
 	layer l = net.layers[net.n - 1];
+	net_classes = l.classes;
 	int j;
 
 	detector_gpu.avg = (float *)calloc(l.outputs, sizeof(float));
@@ -123,9 +124,10 @@ YOLODLL_API int Detector::get_net_height() const {
 
 YOLODLL_API std::vector<bbox_t> Detector::detect(std::string image_filename, float thresh, bool use_mean)
 {
+	std::vector<float> copy_probs;
 	std::shared_ptr<image_t> image_ptr(new image_t, [](image_t *img) { if (img->data) free(img->data); delete img; });
 	*image_ptr = load_image(image_filename);
-	return detect(*image_ptr, thresh, use_mean);
+	return detect(*image_ptr, copy_probs, thresh, use_mean);
 }
 
 static image load_image_stb(char *filename, int channels)
@@ -172,7 +174,7 @@ YOLODLL_API void Detector::free_image(image_t m)
 	}
 }
 
-YOLODLL_API std::vector<bbox_t> Detector::detect(image_t img, float thresh, bool use_mean)
+YOLODLL_API std::vector<bbox_t> Detector::detect(image_t img, std::vector<float> &copy_probs, float thresh, bool use_mean)
 {
 	detector_gpu_t &detector_gpu = *static_cast<detector_gpu_t *>(detector_gpu_ptr.get());
 	network &net = detector_gpu.net;
@@ -221,7 +223,8 @@ YOLODLL_API std::vector<bbox_t> Detector::detect(image_t img, float thresh, bool
 	int nboxes = 0;
 	int letterbox = 0;
 	float hier_thresh = 0.5;
-	detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
+	copy_probs.resize(num_probs(&net));
+	detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox, copy_probs.data());
 	if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
 
 	std::vector<bbox_t> bbox_vec;
@@ -240,7 +243,7 @@ YOLODLL_API std::vector<bbox_t> Detector::detect(image_t img, float thresh, bool
 			bbox.h = b.h*im.h;
 			bbox.obj_id = obj_id;
 			bbox.prob = prob;
-			bbox.track_id = 0;
+			bbox.track_id = i;
 
 			bbox_vec.push_back(bbox);
 		}

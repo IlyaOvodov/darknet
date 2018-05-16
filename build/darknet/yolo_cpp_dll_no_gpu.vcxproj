@@ -242,7 +242,8 @@
     <ClCompile Include="..\..\src\yolo.c" />
     <ClCompile Include="..\..\src\yolo_layer.c" />
     <ClCompile Include="..\..\src\yolo_v2_class.cpp" />
-    <ClCompile Include="..\..\src\yolo_v2_class.hpp" />
+    <ClInclude Include="..\..\src\yolo_v2_class.hpp" />
+    <ClCompile Include="YoloDetector.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\src\activations.h" />
@@ -292,6 +293,7 @@
     <ClInclude Include="..\..\src\unistd.h" />
     <ClInclude Include="..\..\src\upsample_layer.h" />
     <ClInclude Include="..\..\src\utils.h" />
+    <ClInclude Include="YoloDetector.h" />
     <ClInclude Include="..\..\src\yolo_layer.h" />
   </ItemGroup>
   <ItemGroup>
