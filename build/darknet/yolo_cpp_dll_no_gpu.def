@@ -1,0 +1,4 @@
+LIBRARY yolo_cpp_dll_no_gpu
+
+EXPORTS
+	CreateYoloDetector
