@@ -1,3 +1,7 @@
+#include <stdio.h>
+#include <sys/stat.h>
+#define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
+
 #include "network.h"
 #include "region_layer.h"
 #include "cost_layer.h"
@@ -391,9 +395,18 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 		classes = 200;
 	}
 	else if (0 == strcmp(type, "custom")) {
-		if (!outfile) outfile = "detection_results";
-		snprintf(buff, 1024, "%s/%s.txt", prefix, outfile);
-		fp = fopen(buff, "w");
+		// If "result" in .data file is directory, creates "result"/"outfile".txt file
+		// Otherwise takes "result" as output file name
+		struct stat sb;
+		if (stat(prefix, &sb) == 0 && S_ISDIR(sb.st_mode)) {
+			if (!outfile)
+				outfile = "detection_results";
+			snprintf(buff, 1024, "%s/%s.txt", prefix, outfile);
+			fp = fopen(buff, "w");
+		}
+		else {
+			fp = fopen(prefix, "w");
+		}
 		detector_mode = CUSTOM;
 	}
 	else {
