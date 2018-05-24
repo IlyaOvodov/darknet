@@ -30,16 +30,21 @@
 #include "yolo_layer.h"
 #include "parser.h"
 
-network *load_network(char *cfg, char *weights, int clear)
+network *load_network_custom(char *cfg, char *weights, int clear, int batch)
 {
 	printf(" Try to load cfg: %s, weights: %s, clear = %d \n", cfg, weights, clear);
 	network *net = calloc(1, sizeof(network));
-	*net = parse_network_cfg(cfg);
+	*net = parse_network_cfg_custom(cfg, batch);
 	if (weights && weights[0] != 0) {
 		load_weights(net, weights);
 	}
 	if (clear) (*net->seen) = 0;
 	return net;
+}
+
+network *load_network(char *cfg, char *weights, int clear)
+{
+	return load_network_custom(cfg, weights, clear, 0);
 }
 
 int get_current_batch(network net)
@@ -172,7 +177,7 @@ network make_network(int n)
     net.n = n;
     net.layers = calloc(net.n, sizeof(layer));
     net.seen = calloc(1, sizeof(int));
-    #ifdef GPU
+#ifdef GPU
     net.input_gpu = calloc(1, sizeof(float *));
     net.truth_gpu = calloc(1, sizeof(float *));
 
@@ -180,7 +185,7 @@ network make_network(int n)
 	net.output16_gpu = calloc(1, sizeof(float *));
 	net.max_input16_size = calloc(1, sizeof(size_t));
 	net.max_output16_size = calloc(1, sizeof(size_t));
-    #endif
+#endif
     return net;
 }
 
