@@ -554,19 +554,16 @@ int num_detections(network *net, float thresh)
 	return s;
 }
 
-int num_probs(network *net)
+int num_probs(network *net, float thresh)
 {
 	int i;
 	int s = 0;
 	for (i = 0; i < net->n; ++i) {
 		layer l = net->layers[i];
-		// TODO: output for YOLO and DETECTION layers (see also fill_network_boxes(...) )
-		/*
 		if (l.type == YOLO) {
-			s += yolo_num_detections(l, thresh);
+			s += yolo_num_detections(l, thresh)*l.classes;
 		}
-		*/
-		if ( /* l.type == DETECTION || */ l.type == REGION) {
+		if ( l.type == DETECTION || l.type == REGION) {
 			s += l.w*l.h*l.n*l.classes;
 		}
 	}
@@ -621,8 +618,10 @@ void fill_network_boxes(network *net, int w, int h, float thresh, float hier, in
 	for (j = 0; j < net->n; ++j) {
 		layer l = net->layers[j];
 		if (l.type == YOLO) {
-			int count = get_yolo_detections(l, w, h, net->w, net->h, thresh, map, relative, dets, letter);
+			int count = get_yolo_detections(l, w, h, net->w, net->h, thresh, map, relative, dets, letter, source_probs);
 			dets += count;
+			if (source_probs)
+				source_probs += yolo_num_detections(l, thresh)*l.classes;
 		}
 		if (l.type == REGION) {
 			custom_get_region_detections(l, w, h, net->w, net->h, thresh, map, hier, relative, dets, letter, source_probs);
@@ -634,6 +633,9 @@ void fill_network_boxes(network *net, int w, int h, float thresh, float hier, in
 		if (l.type == DETECTION) {
 			get_detection_detections(l, w, h, thresh, dets);
 			dets += l.w*l.h*l.n;
+			// !!! source_probs IS NOT IMPLEMENTED
+			if (source_probs)
+				source_probs += l.w*l.h*l.n*l.classes;
 		}
 	}
 }

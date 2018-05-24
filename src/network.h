@@ -134,7 +134,7 @@ int resize_network(network *net, int w, int h);
 void set_batch_network(network *net, int b);
 int get_network_input_size(network net);
 float get_network_cost(network net);
-int num_probs(network *net); // required size of source_probs buffer for get_network_boxes(..., source_probs)
+int num_probs(network *net, float thresh); // required size of source_probs buffer for get_network_boxes(..., source_probs)
 YOLODLL_API detection *get_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, int *num, int letter
 	, float* source_probs); // source_probs - if !=0, buffer for output array of raw prob's for REGION (only) layers
 YOLODLL_API detection *make_network_boxes(network *net, float thresh, int *num);
