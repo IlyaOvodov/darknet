@@ -90,7 +90,7 @@ void *detect_in_thread(void *ptr)
     if(l.type == DETECTION){
         get_detection_boxes(l, 1, 1, demo_thresh, probs, boxes, 0);
     } else if (l.type == REGION){
-        get_region_boxes(l, 1, 1, demo_thresh, probs, boxes, 0, 0);
+        get_region_boxes(l, 1, 1, demo_thresh, probs, 0, boxes, 0);
     } else {
         error("Last layer must produce detections\n");
     }
@@ -98,7 +98,7 @@ void *detect_in_thread(void *ptr)
 	*/
 	int letter = 0;
 	int nboxes = 0;
-	detection *dets = get_network_boxes(&net, det_s.w, det_s.h, demo_thresh, demo_thresh, 0, 1, &nboxes, letter, 0);
+	detection *dets = get_network_boxes(&net, det_s.w, det_s.h, demo_thresh, demo_thresh, 0, 1, &nboxes, letter);
 	//if (nms) do_nms_obj(dets, nboxes, l.classes, nms);	// bad results
 	if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
 	

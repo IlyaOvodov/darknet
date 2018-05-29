@@ -30,7 +30,6 @@ struct Detection {
 	unsigned int x = 0, y = 0, w = 0, h = 0;	// (x,y) - координаты верхнего левого угла, (w, h) - ширина и высота рамочки
 	float prob = 0;					// confidence - вероятность того, что объект найден правильно
 	unsigned int obj_id = -1;		// класс объекта из диапазона [0, количество_классов + 1]
-	unsigned int anchor_id = -1;		// id якоря в списке всех якорей, которые брались на последней feature map
 	const float *feautures = nullptr;			// вероятности по классам для каждой рамочки
 };
 

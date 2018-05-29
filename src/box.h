@@ -26,7 +26,8 @@ typedef struct{
 typedef struct detection {
 	box bbox;
 	int classes;
-	float *prob;
+	float *prob; // prob only for probable (prob>thresh) classes, otherwise = 0
+	float *prob_raw; // prob as detected, for all classes
 	float *mask;
 	float objectness;
 	int sort_class;

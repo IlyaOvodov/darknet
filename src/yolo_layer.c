@@ -361,8 +361,7 @@ void avg_flipped_yolo(layer l)
     }
 }
 
-int get_yolo_detections(layer l, int w, int h, int netw, int neth, float thresh, int *map, int relative, detection *dets, int letter
-	, float* source_probs)
+int get_yolo_detections(layer l, int w, int h, int netw, int neth, float thresh, int *map, int relative, detection *dets, int letter)
 {
     int i,j,n;
     float *predictions = l.output;
@@ -383,9 +382,8 @@ int get_yolo_detections(layer l, int w, int h, int netw, int neth, float thresh,
                 int class_index = entry_index(l, 0, n*l.w*l.h + i, 4 + 1 + j);
                 float prob = objectness*predictions[class_index];
                 dets[count].prob[j] = (prob > thresh) ? prob : 0;
-				if (source_probs)
-					source_probs[count*l.classes + j] = prob;
-            }
+				dets[count].prob_raw[j] = prob;
+			}
             ++count;
         }
     }

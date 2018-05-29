@@ -217,14 +217,14 @@ YOLODLL_API std::vector<bbox_t> Detector::detect(image_t img, std::vector<float>
 		l.output = detector_gpu.avg;
 		detector_gpu.demo_index = (detector_gpu.demo_index + 1) % FRAMES;
 	}
-	//get_region_boxes(l, 1, 1, thresh, detector_gpu.probs, detector_gpu.boxes, 0, 0);
+	//get_region_boxes(l, 1, 1, thresh, detector_gpu.probs, 0, detector_gpu.boxes, 0);
 	//if (nms) do_nms_sort(detector_gpu.boxes, detector_gpu.probs, l.w*l.h*l.n, l.classes, nms);
 
 	int nboxes = 0;
 	int letterbox = 0;
 	float hier_thresh = 0.5;
-	copy_probs.resize(num_probs(&net, thresh));
-	detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox, copy_probs.data());
+	copy_probs.clear();
+	detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
 	if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
 
 	std::vector<bbox_t> bbox_vec;
@@ -243,9 +243,10 @@ YOLODLL_API std::vector<bbox_t> Detector::detect(image_t img, std::vector<float>
 			bbox.h = b.h*im.h;
 			bbox.obj_id = obj_id;
 			bbox.prob = prob;
-			bbox.track_id = i;
+			bbox.track_id = 0;
 
 			bbox_vec.push_back(bbox);
+			copy_probs.insert(copy_probs.end(), dets[i].prob_raw, dets[i].prob_raw + dets[i].classes);
 		}
 	}
 

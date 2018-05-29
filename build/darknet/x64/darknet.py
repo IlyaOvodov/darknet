@@ -57,6 +57,7 @@ class DETECTION(Structure):
     _fields_ = [("bbox", BOX),
                 ("classes", c_int),
                 ("prob", POINTER(c_float)),
+                ("prob_raw", POINTER(c_float)),
                 ("mask", POINTER(c_float)),
                 ("objectness", c_float),
                 ("sort_class", c_int)]

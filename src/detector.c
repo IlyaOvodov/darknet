@@ -476,7 +476,7 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 			int h = val[t].h;
 			int nboxes = 0;
 			int letterbox = (args.type == LETTERBOX_DATA);
-			detection *dets = get_network_boxes(&net, w, h, thresh, .5, map, 0, &nboxes, letterbox, 0);
+			detection *dets = get_network_boxes(&net, w, h, thresh, .5, map, 0, &nboxes, letterbox);
 			if (nms) do_nms_sort(dets, nboxes, classes, nms);
 			if (detector_mode == COCO) {
 				print_cocos(fp, path, dets, nboxes, classes, w, h);
@@ -551,7 +551,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 		network_predict(net, sized.data);
 		int nboxes = 0;
 		int letterbox = 0;
-		detection *dets = get_network_boxes(&net, sized.w, sized.h, thresh, .5, 0, 1, &nboxes, letterbox, 0);
+		detection *dets = get_network_boxes(&net, sized.w, sized.h, thresh, .5, 0, 1, &nboxes, letterbox);
 		if (nms) do_nms_obj(dets, nboxes, 1, nms);
 		int selected_detections_num;
 		detection_with_class* selected_detections = get_actual_detections(dets, nboxes, -1 /*no threshould*/, &selected_detections_num);
@@ -785,8 +785,8 @@ void validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float
 			int nboxes = 0;
 			int letterbox = (args.type == LETTERBOX_DATA);
 			float hier_thresh = 0;
-			detection *dets = get_network_boxes(&net, 1, 1, thresh, hier_thresh, 0, 0, &nboxes, letterbox, 0);
-			//detection *dets = get_network_boxes(&net, val[t].w, val[t].h, thresh, hier_thresh, 0, 1, &nboxes, letterbox, 0); // for letterbox=1
+			detection *dets = get_network_boxes(&net, 1, 1, thresh, hier_thresh, 0, 0, &nboxes, letterbox);
+			//detection *dets = get_network_boxes(&net, val[t].w, val[t].h, thresh, hier_thresh, 0, 1, &nboxes, letterbox); // for letterbox=1
 			if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
 
 			char labelpath[4096];
@@ -1254,11 +1254,11 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         network_predict(net, X);
 		//network_predict_image(&net, im); letterbox = 1;
         printf("%s: Predicted in %f seconds.\n", input, (what_time_is_it_now()-time));
-        //get_region_boxes(l, 1, 1, thresh, probs, boxes, 0, 0);
+        //get_region_boxes(l, 1, 1, thresh, probs, 0, boxes, 0);
 		// if (nms) do_nms_sort_v2(boxes, probs, l.w*l.h*l.n, l.classes, nms);
 		//draw_detections(im, l.w*l.h*l.n, thresh, boxes, probs, names, alphabet, l.classes);
 		int nboxes = 0;
-		detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox, 0);
+		detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
 		if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
 		draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
         save_image(im, "predictions");

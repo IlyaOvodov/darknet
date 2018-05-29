@@ -94,8 +94,7 @@ public:
 				m_current_result[index].h = m_current_bbox_result[index].h;
 				m_current_result[index].prob = m_current_bbox_result[index].prob;
 				m_current_result[index].obj_id = m_current_bbox_result[index].obj_id;
-				m_current_result[index].anchor_id = m_current_bbox_result[index].track_id;
-				m_current_result[index].feautures = &m_probs[m_list_names.size()*m_current_result[index].anchor_id];
+				m_current_result[index].feautures = &m_probs[m_list_names.size()*index];
 			}
 			return kOk;
 		}

@@ -309,6 +309,7 @@ void get_detection_detections(layer l, int w, int h, float thresh, detection *de
 				int class_index = i*l.classes;
 				float prob = scale*predictions[class_index + j];
 				dets[index].prob[j] = (prob > thresh) ? prob : 0;
+				dets[index].prob_raw[j] = prob;
 			}
 		}
 	}
