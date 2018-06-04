@@ -39,10 +39,23 @@ struct Detection {
 class IYoloDetector {
 public:
 	/**
+	* @brief Ожидаемый размер передаваемого в DetectObjects изображения
+	* 
+	* Если изображение имеет другой размер, оно масштабируется к требуемому внутри DetectObjects(...)
+	*/
+	virtual int GetInputWidth() = 0;
+	virtual int GetInputHeight() = 0;
+	/**
+	* @brief Ожидаемая цветность передаваемого в DetectObjects изображения
+	*
+	* Если изображение имеет другое количество каналов, DetectObjects завершается с ошибкой
+	*/
+	virtual int GetInputColorDepth() = 0;
+	/**
 	* @brief Выполняет обнаружение объектов на изображеннии с помощью нейронной сети Yolo
 	*
-	* Ожидает изображения в формате B-G-R
-	* @param [in] image: ожидает изображения в формате B-G-R, 
+	* Ожидает изображения в формате B-G-R или 1-канальное в зависимости от конфигурации нейросети
+	* @param [in] image: ожидает изображения в формате B-G-R или 1-канальное, 
 	*				    для положительного bpl image должен указывать на первую в памяти строку изображения
 	* @param [in] width: ширина 
 	* @param [in] height: Для  bottom-based (BITMAPINFOHEADER..) изображений необходимо передавать height > 0

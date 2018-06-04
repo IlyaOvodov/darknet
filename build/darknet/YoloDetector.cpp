@@ -57,9 +57,25 @@ public:
 		return kOk;
 	}
 
+	int GetInputWidth() override {
+		return m_detector_from_darknet->get_net_width();
+	};
+	int GetInputHeight() override {
+		return m_detector_from_darknet->get_net_height();
+	}
+	int GetInputColorDepth() override {
+		return m_detector_from_darknet->get_net_color_depth();
+	}
+
 	// \brief Выполняет обнаружение объектов на изображеннии с помощью нейронной сети Yolo 
 	virtual ErrorCode DetectObjects(const uint8_t* image, int width, int height, int bpl, int bpp, float threshold, bool use_mean)
 	{
+		if (bpp/8 != m_detector_from_darknet->get_net_color_depth())
+		{
+			m_last_error = std::string("Incorrect color depth: image depth is ") + std::to_string(bpp / 8)
+				+ ", net depth is " + std::to_string(m_detector_from_darknet->get_net_color_depth());
+			return kError;
+		}
 		try
 		{
 			m_input_image.resize(width*std::abs(height)*bpp);
