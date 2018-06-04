@@ -45,11 +45,13 @@ char **get_random_paths(char **paths, int n, int m)
     int i;
     pthread_mutex_lock(&mutex);
 	//printf("n = %d \n", n);
-    for(i = 0; i < n; ++i){		
-        int index = random_gen() % m;
-        random_paths[i] = paths[index];
-        //if(i == 0) printf("%s\n", paths[index]);
-		//printf("grp: %s\n", paths[index]);
+    for(i = 0; i < n; ++i){
+		do {
+			int index = random_gen() % m;
+			random_paths[i] = paths[index];
+			//if(i == 0) printf("%s\n", paths[index]);
+			//printf("grp: %s\n", paths[index]);
+		} while (strlen(random_paths[i]) == 0);
     }
     pthread_mutex_unlock(&mutex);
     return random_paths;
@@ -287,15 +289,15 @@ void fill_truth_region(char *path, float *truth, int classes, int num_boxes, int
     free(boxes);
 }
 
-void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, int flip, float dx, float dy, float sx, float sy, 
+void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, int flip, float dx, float dy, float sx, float sy,
 	int small_object, int net_w, int net_h)
 {
-    char labelpath[4096];
+	char labelpath[4096];
 	replace_image_to_label(path, labelpath);
 
-    int count = 0;
+	int count = 0;
 	int i;
-    box_label *boxes = read_boxes(labelpath, &count);
+	box_label *boxes = read_boxes(labelpath, &count);
 	float lowest_w = 1.F / net_w;
 	float lowest_h = 1.F / net_h;
 	if (small_object == 1) {
@@ -304,23 +306,61 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
 			if (boxes[i].h < lowest_h) boxes[i].h = lowest_h;
 		}
 	}
-    randomize_boxes(boxes, count);
-    correct_boxes(boxes, count, dx, dy, sx, sy, flip);
-    if(count > num_boxes) count = num_boxes;
-    float x,y,w,h;
-    int id;
+	randomize_boxes(boxes, count);
+	correct_boxes(boxes, count, dx, dy, sx, sy, flip);
+	if (count > num_boxes) count = num_boxes;
+	float x, y, w, h;
+	int id;
 
-    for (i = 0; i < count; ++i) {
-        x =  boxes[i].x;
-        y =  boxes[i].y;
-        w =  boxes[i].w;
-        h =  boxes[i].h;
-        id = boxes[i].id;
+	for (i = 0; i < count; ++i) {
+		x = boxes[i].x;
+		y = boxes[i].y;
+		w = boxes[i].w;
+		h = boxes[i].h;
+		id = boxes[i].id;
 
 		// not detect small objects
 		//if ((w < 0.001F || h < 0.001F)) continue;
 		// if truth (box for object) is smaller than 1x1 pix
-		if ((w < lowest_w || h < lowest_h)) continue;
+		char buff[256];
+		if (id >= classes) {
+			printf("\n Wrong annotation: class_id = %d. But class_id should be [from 0 to %d] \n", id, classes);
+			sprintf(buff, "echo %s \"Wrong annotation: class_id = %d. But class_id should be [from 0 to %d]\" >> bad_label.list", labelpath, id, classes);
+			system(buff);
+			getchar();
+			continue;
+		}
+		if ((w < lowest_w || h < lowest_h)) {
+			//sprintf(buff, "echo %s \"Very small object: w < lowest_w OR h < lowest_h\" >> bad_label.list", labelpath);
+			//system(buff);
+			continue;
+		}
+		if (x == 999999 || y == 999999) {
+			printf("\n Wrong annotation: x = 0, y = 0 \n");
+			sprintf(buff, "echo %s \"Wrong annotation: x = 0 or y = 0\" >> bad_label.list", labelpath);
+			system(buff);
+			continue;
+		}
+		if (x < 0 || x > 1 || y < 0 || y > 1) {
+			printf("\n Wrong annotation: x = %f, y = %f \n", x, y);
+			sprintf(buff, "echo %s \"Wrong annotation: x = %f, y = %f\" >> bad_label.list", labelpath, x, y);
+			system(buff);
+			continue;
+		}
+		if (w > 1) {
+			printf("\n Wrong annotation: w = %f \n", w);
+			sprintf(buff, "echo %s \"Wrong annotation: w = %f\" >> bad_label.list", labelpath, w);
+			system(buff);
+			w = 1;
+		}
+		if (h > 1) {
+			printf("\n Wrong annotation: h = %f \n", h);
+			sprintf(buff, "echo %s \"Wrong annotation: h = %f\" >> bad_label.list", labelpath, h);
+			system(buff);
+			h = 1;
+		}
+		if (x == 0) x += lowest_w;
+		if (y == 0) y += lowest_h;
 
         truth[i*5+0] = x;
         truth[i*5+1] = y;
