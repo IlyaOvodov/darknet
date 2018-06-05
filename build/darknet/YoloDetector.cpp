@@ -70,9 +70,9 @@ public:
 	// \brief Выполняет обнаружение объектов на изображеннии с помощью нейронной сети Yolo 
 	virtual ErrorCode DetectObjects(const uint8_t* image, int width, int height, int bpl, int bpp, float threshold, bool use_mean)
 	{
-		if (bpp/8 != m_detector_from_darknet->get_net_color_depth())
+		if (bpp != m_detector_from_darknet->get_net_color_depth())
 		{
-			m_last_error = std::string("Incorrect color depth: image depth is ") + std::to_string(bpp / 8)
+			m_last_error = std::string("Incorrect color depth: image depth is ") + std::to_string(bpp)
 				+ ", net depth is " + std::to_string(m_detector_from_darknet->get_net_color_depth());
 			return kError;
 		}
