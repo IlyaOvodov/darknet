@@ -305,7 +305,8 @@ void print_custom_detections(FILE *fps, char *id, detection *dets, int total, fl
 
 	qsort(selected_detections, selected_detections_num, sizeof(*selected_detections), compare_by_lefts);
 
-	for (int i = 0; i < selected_detections_num; ++i) {
+	int i;
+	for (i = 0; i < selected_detections_num; ++i) {
 		const detection det_i = selected_detections[i].det;
 		const int best_class = selected_detections[i].best_class;
 		if (best_class >= 0) {
