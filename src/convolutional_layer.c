@@ -113,21 +113,7 @@ size_t get_workspace_size(layer l){
                 l.fw_algo,
                 &s);
         if (s > most) most = s;
-        cudnnGetConvolutionBackwardFilterWorkspaceSize(cudnn_handle(),
-                l.srcTensorDesc,
-                l.ddstTensorDesc,
-                l.convDesc,
-                l.dweightDesc,
-                l.bf_algo,
-                &s);
         if (s > most) most = s;
-        cudnnGetConvolutionBackwardDataWorkspaceSize(cudnn_handle(),
-                l.weightDesc,
-                l.ddstTensorDesc,
-                l.convDesc,
-                l.dsrcTensorDesc,
-                l.bd_algo,
-                &s);
         if (s > most) most = s;
         return most;
     }
@@ -204,23 +190,8 @@ void cudnn_convolutional_setup(layer *l, int cudnn_preference)
 			forward_algo,
             0,
             &l->fw_algo);
-    cudnnGetConvolutionBackwardDataAlgorithm(cudnn_handle(),
-            l->weightDesc,
-            l->ddstTensorDesc,
-            l->convDesc,
-            l->dsrcTensorDesc,
-			backward_algo,
-            0,
-            &l->bd_algo);
-    cudnnGetConvolutionBackwardFilterAlgorithm(cudnn_handle(),
-            l->srcTensorDesc,
-            l->ddstTensorDesc,
-            l->convDesc,
-            l->dweightDesc,
-			backward_filter,
-            0,
-            &l->bf_algo);
 
+#ifdef CUDNN_HALF
 	if (data_type == CUDNN_DATA_HALF) 
 	{
 		// HALF-16 if(data_type == CUDNN_DATA_HALF)
@@ -252,6 +223,7 @@ void cudnn_convolutional_setup(layer *l, int cudnn_preference)
 		if (fw == 2 && bd == 2 && bf == 2) printf("TF ");
 		else if (fw == 1 && bd == 1 && bf == 1) printf("TH ");
 	}
+#endif
 }
 #endif
 #endif

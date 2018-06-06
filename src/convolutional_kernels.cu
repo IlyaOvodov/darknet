@@ -392,19 +392,6 @@ void backward_convolutional_layer_gpu(convolutional_layer l, network_state state
 
 	// calculate conv weight updates
 	// if used: beta=1 then loss decreases faster
-    cudnnConvolutionBackwardFilter(cudnn_handle(),
-            &one,
-            l.srcTensorDesc,
-            state.input,
-            l.ddstTensorDesc,
-            l.delta_gpu,
-            l.convDesc,
-            l.bf_algo,
-            state.workspace,
-            l.workspace_size,
-            &one,
-            l.dweightDesc,
-            l.weight_updates_gpu);
 
     if(state.delta){
         if(l.binary || l.xnor) swap_binary(&l);
