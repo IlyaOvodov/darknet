@@ -172,13 +172,9 @@ void cudnn_convolutional_setup(layer *l, int cudnn_preference)
 	cudnnSetConvolution2dDescriptor(l->convDesc, l->pad, l->pad, l->stride, l->stride, 1, 1, CUDNN_CROSS_CORRELATION);	// cudnn 5.1
 #endif
 	int forward_algo = CUDNN_CONVOLUTION_FWD_PREFER_FASTEST;
-	int backward_algo = CUDNN_CONVOLUTION_BWD_DATA_PREFER_FASTEST;
-	int backward_filter = CUDNN_CONVOLUTION_BWD_FILTER_PREFER_FASTEST;
 	if (cudnn_preference == cudnn_smallest) 
 	{
 		forward_algo = CUDNN_CONVOLUTION_FWD_NO_WORKSPACE;
-		backward_algo = CUDNN_CONVOLUTION_BWD_DATA_NO_WORKSPACE;
-		backward_filter = CUDNN_CONVOLUTION_BWD_FILTER_NO_WORKSPACE;
 		printf(" CUDNN-slow ");
 	}
 
