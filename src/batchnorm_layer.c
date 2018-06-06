@@ -182,27 +182,6 @@ void forward_batchnorm_layer_gpu(layer l, network_state state)
 	if (l.type == BATCHNORM) copy_ongpu(l.outputs*l.batch, state.input, 1, l.output_gpu, 1);
 	copy_ongpu(l.outputs*l.batch, l.output_gpu, 1, l.x_gpu, 1);
 	if (state.train) {
-#ifdef CUDNN
-		float one = 1;
-		float zero = 0;
-		cudnnBatchNormalizationForwardTraining(cudnn_handle(),
-			CUDNN_BATCHNORM_SPATIAL,
-			&one,
-			&zero,
-			l.normDstTensorDesc,
-			l.x_gpu,				// input
-			l.normDstTensorDesc,
-			l.output_gpu,			// output
-			l.normTensorDesc,
-			l.scales_gpu,
-			l.biases_gpu,
-			.01,
-			l.rolling_mean_gpu,		// output (should be FP32)
-			l.rolling_variance_gpu,	// output (should be FP32)
-			.00001,
-			l.mean_gpu,			// output (should be FP32)
-			l.variance_gpu);	// output (should be FP32)
-#else
 		fast_mean_gpu(l.output_gpu, l.batch, l.out_c, l.out_h*l.out_w, l.mean_gpu);
 		fast_variance_gpu(l.output_gpu, l.mean_gpu, l.batch, l.out_c, l.out_h*l.out_w, l.variance_gpu);
 
@@ -217,7 +196,6 @@ void forward_batchnorm_layer_gpu(layer l, network_state state)
 
 		scale_bias_gpu(l.output_gpu, l.scales_gpu, l.batch, l.out_c, l.out_h*l.out_w);
 		add_bias_gpu(l.output_gpu, l.biases_gpu, l.batch, l.out_c, l.out_w*l.out_h);
-#endif
 	}
 	else {
 		normalize_gpu(l.output_gpu, l.rolling_mean_gpu, l.rolling_variance_gpu, l.batch, l.out_c, l.out_h*l.out_w);
