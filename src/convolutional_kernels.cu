@@ -74,6 +74,7 @@ void binarize_weights_gpu(float *weights, int n, int size, float *binary)
     check_error(cudaPeekAtLastError());
 }
 
+#ifdef CUDNN_HALF
 __global__ void cuda_f32_to_f16(float* input_f32, size_t size, half *output_f16)
 {
 	int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -107,6 +108,7 @@ half *cuda_make_f16_from_f32_array(float *src, size_t n)
 	if (!dst16) error("Cuda malloc failed\n");
 	return dst16;
 }
+#endif
 
 void forward_convolutional_layer_gpu(convolutional_layer l, network_state state)
 {
