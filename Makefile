@@ -1,9 +1,9 @@
-GPU=0
-CUDNN=0
+GPU=1
+CUDNN=1
 CUDNN_HALF=0
-OPENCV=0
+OPENCV=1
 AVX=0
-OPENMP=0
+OPENMP=1
 LIBSO=0
 
 # set GPU=1 and CUDNN=1 to speedup on GPU
@@ -13,10 +13,10 @@ LIBSO=0
 DEBUG=0
 
 ARCH= -gencode arch=compute_30,code=sm_30 \
+      -gencode arch=compute_32,code=sm_32 \
       -gencode arch=compute_35,code=sm_35 \
       -gencode arch=compute_50,code=[sm_50,compute_50] \
-      -gencode arch=compute_52,code=[sm_52,compute_52] \
-	  -gencode arch=compute_61,code=[sm_61,compute_61]
+      -gencode arch=compute_52,code=[sm_52,compute_52]
 
 OS := $(shell uname)
 
