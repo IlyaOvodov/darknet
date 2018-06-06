@@ -399,19 +399,6 @@ void backward_convolutional_layer_gpu(convolutional_layer l, network_state state
         if(l.binary || l.xnor) swap_binary(&l);
 		// http://docs.nvidia.com/deeplearning/sdk/cudnn-developer-guide/index.html#cudnnConvolutionBackwardData
 		// calculate delta for the next layer
-        cudnnConvolutionBackwardData(cudnn_handle(),
-                &one,
-                l.weightDesc,
-                l.weights_gpu,
-                l.ddstTensorDesc,
-                l.delta_gpu,
-                l.convDesc,
-                l.bd_algo,
-                state.workspace,
-                l.workspace_size,
-                &one,
-                l.dsrcTensorDesc,
-                state.delta);
         if(l.binary || l.xnor) swap_binary(&l);
         if(l.xnor) gradient_array_ongpu(original_input, l.batch*l.c*l.h*l.w, HARDTAN, state.delta);
     }
