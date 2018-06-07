@@ -30,6 +30,7 @@ image get_image_from_stream(CvCapture *cap);
 static char **demo_names;
 static image **demo_alphabet;
 static int demo_classes;
+static int demo_batch = 1;
 
 static float **probs;
 static box *boxes;
@@ -86,11 +87,18 @@ void *fetch_in_thread(void *ptr)
 
 void *detect_in_thread(void *ptr)
 {
-	double before = get_wall_time();
     float nms = .45;	// 0.4F
 
     layer l = net.layers[net.n-1];
     float *X = det_s.data;
+	if (net.batch > 1) {
+		const int img_size = det_s.h*det_s.w*det_s.c;
+		X = malloc(img_size*net.batch*sizeof(float));
+		int i = 0;
+		for (i = 0; i < net.batch; ++i)
+			memcpy(X + i*img_size, det_s.data, img_size*sizeof(float));
+	}
+	double before = get_wall_time();
     float *prediction = network_predict(net, X);
 
     memcpy(predictions[demo_index], prediction, l.outputs*sizeof(float));
@@ -132,6 +140,8 @@ void *detect_in_thread(void *ptr)
 	draw_detections_cv_v3(det_img, dets, nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes, demo_ext_output);
 	//draw_detections_cv(det_img, l.w*l.h*l.n, demo_thresh, boxes, probs, demo_names, demo_alphabet, demo_classes);
 	free_detections(dets, nboxes);
+	if (net.batch > 1)
+		free(X);
 
 	return 0;
 }
@@ -148,7 +158,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     demo_thresh = thresh;
 	demo_ext_output = ext_output;
     printf("Demo\n");
-    net = parse_network_cfg_custom(cfgfile, 1);	// set batch=1
+    net = parse_network_cfg_custom(cfgfile, demo_batch);	// set batch=1
     if(weightfile){
         load_weights(&net, weightfile);
     }
