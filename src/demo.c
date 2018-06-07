@@ -57,6 +57,16 @@ IplImage* det_img;
 IplImage* show_img;
 
 static int flag_exit;
+static double avg_process_time = -1;
+
+double get_wall_time()
+{
+	struct timeval time;
+	if (gettimeofday(&time, NULL)) {
+		return 0;
+	}
+	return (double)time.tv_sec + (double)time.tv_usec * .000001;
+}
 
 void *fetch_in_thread(void *ptr)
 {
@@ -76,6 +86,7 @@ void *fetch_in_thread(void *ptr)
 
 void *detect_in_thread(void *ptr)
 {
+	double before = get_wall_time();
     float nms = .45;	// 0.4F
 
     layer l = net.layers[net.n-1];
@@ -103,10 +114,12 @@ void *detect_in_thread(void *ptr)
 	//if (nms) do_nms_obj(dets, nboxes, l.classes, nms);	// bad results
 	if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
 	
+	double after = get_wall_time();
+	avg_process_time = avg_process_time < 0 ? (after - before) : avg_process_time*0.99 + (after - before)*0.01;
 
     printf("\033[2J");
     printf("\033[1;1H");
-    printf("\nFPS:%.1f\n",fps);
+    printf("\nFPS:%.1f\t avg.time:%f\t net fps:%.1f\n",fps, avg_process_time, 1./avg_process_time);
     printf("Objects:\n\n");
 
     //images[demo_index] = det;
@@ -121,15 +134,6 @@ void *detect_in_thread(void *ptr)
 	free_detections(dets, nboxes);
 
 	return 0;
-}
-
-double get_wall_time()
-{
-    struct timeval time;
-    if (gettimeofday(&time,NULL)){
-        return 0;
-    }
-    return (double)time.tv_sec + (double)time.tv_usec * .000001;
 }
 
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes,
