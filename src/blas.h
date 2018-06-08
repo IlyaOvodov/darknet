@@ -14,6 +14,7 @@ void pow_cpu(int N, float ALPHA, float *X, int INCX, float *Y, int INCY);
 void mul_cpu(int N, float *X, int INCX, float *Y, int INCY);
 
 void axpy_cpu(int N, float ALPHA, float *X, int INCX, float *Y, int INCY);
+void axpy_cpu_decay(int N, float ALPHA, float *X, int INCX, float *Y, int INCY, int use_L2);
 void copy_cpu(int N, float *X, int INCX, float *Y, int INCY);
 void scal_cpu(int N, float ALPHA, float *X, int INCX);
 void fill_cpu(int N, float ALPHA, float * X, int INCX);
@@ -42,6 +43,7 @@ void upsample_cpu(float *in, int w, int h, int c, int batch, int stride, int for
 #include "cuda.h"
 
 void axpy_ongpu(int N, float ALPHA, float * X, int INCX, float * Y, int INCY);
+void axpy_ongpu_decay(int N, float ALPHA, float * X, int INCX, float * Y, int INCY, int use_L2);
 void axpy_ongpu_offset(int N, float ALPHA, float * X, int OFFX, int INCX, float * Y, int OFFY, int INCY);
 void copy_ongpu(int N, float * X, int INCX, float * Y, int INCY);
 void copy_ongpu_offset(int N, float * X, int OFFX, int INCX, float * Y, int OFFY, int INCY);

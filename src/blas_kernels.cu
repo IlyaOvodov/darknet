@@ -159,7 +159,7 @@ extern "C" void adam_update_gpu(float *w, float *d, float *m, float *v, float B1
 {
 	scal_ongpu(n, B1, m, 1);
 	scal_ongpu(n, B2, v, 1);
-	axpy_ongpu(n, -decay*batch, w, 1, d, 1);
+	axpy_ongpu_decay(n, -abs(decay)*batch, w, 1, d, 1, decay>=0);
 
 	axpy_ongpu(n, (1 - B1), d, 1, m, 1);
 	mul_ongpu(n, d, 1, d, 1);
@@ -381,6 +381,12 @@ __global__ void axpy_kernel(int N, float ALPHA, float *X, int OFFX, int INCX,  f
     if(i < N) Y[OFFY+i*INCY] += ALPHA*X[OFFX+i*INCX];
 }
 
+__global__ void axpy_kernel_decay_L1(int N, float ALPHA, float *X, int INCX, float *Y, int INCY)
+{
+	int i = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
+	if (i < N) Y[i*INCY] += X[i*INCX] > 0 ? ALPHA : (X[i*INCX] < 0 ? -ALPHA : 0);
+}
+
 __global__ void pow_kernel(int N, float ALPHA, float *X, int INCX, float *Y, int INCY)
 {
     int i = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
@@ -530,6 +536,17 @@ extern "C" void variance_gpu(float *x, float *mean, int batch, int filters, int 
 extern "C" void axpy_ongpu(int N, float ALPHA, float * X, int INCX, float * Y, int INCY)
 {
     axpy_ongpu_offset(N, ALPHA, X, 0, INCX, Y, 0, INCY);
+}
+
+extern "C" void axpy_ongpu_decay(int N, float ALPHA, float * X, int INCX, float * Y, int INCY, int use_L2)
+{
+	if (use_L2) {
+		axpy_ongpu(N, ALPHA, X, INCX, Y, INCY);
+	} 
+	else {
+		axpy_kernel_decay_L1 << <cuda_gridsize(N), BLOCK, 0, get_cuda_stream() >> > (N, ALPHA, X, INCX, Y, INCY);
+		check_error(cudaPeekAtLastError());
+	}
 }
 
 extern "C" void pow_ongpu(int N, float ALPHA, float * X, int INCX, float * Y, int INCY)

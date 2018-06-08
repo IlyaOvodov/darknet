@@ -633,7 +633,7 @@ void update_convolutional_layer(convolutional_layer l, int batch, float learning
         scal_cpu(l.n, momentum, l.scale_updates, 1);
     }
 
-    axpy_cpu(size, -decay*batch, l.weights, 1, l.weight_updates, 1);
+    axpy_cpu_decay(size, -abs(decay)*batch, l.weights, 1, l.weight_updates, 1, decay >= 0);
     axpy_cpu(size, learning_rate/batch, l.weight_updates, 1, l.weights, 1);
     scal_cpu(size, momentum, l.weight_updates, 1);
 }

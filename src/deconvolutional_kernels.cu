@@ -102,7 +102,7 @@ extern "C" void update_deconvolutional_layer_gpu(deconvolutional_layer layer, fl
     axpy_ongpu(layer.n, learning_rate, layer.bias_updates_gpu, 1, layer.biases_gpu, 1);
     scal_ongpu(layer.n, momentum, layer.bias_updates_gpu, 1);
 
-    axpy_ongpu(size, -decay, layer.weights_gpu, 1, layer.weight_updates_gpu, 1);
+    axpy_ongpu_decay(size, -abs(decay), layer.weights_gpu, 1, layer.weight_updates_gpu, 1, decay >= 0);
     axpy_ongpu(size, learning_rate, layer.weight_updates_gpu, 1, layer.weights_gpu, 1);
     scal_ongpu(size, momentum, layer.weight_updates_gpu, 1);
 }

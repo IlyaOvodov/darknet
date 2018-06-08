@@ -197,7 +197,7 @@ void update_deconvolutional_layer(deconvolutional_layer l, float learning_rate, 
     axpy_cpu(l.n, learning_rate, l.bias_updates, 1, l.biases, 1);
     scal_cpu(l.n, momentum, l.bias_updates, 1);
 
-    axpy_cpu(size, -decay, l.weights, 1, l.weight_updates, 1);
+    axpy_cpu_decay(size, -abs(decay), l.weights, 1, l.weight_updates, 1, decay >= 0);
     axpy_cpu(size, learning_rate, l.weight_updates, 1, l.weights, 1);
     scal_cpu(size, momentum, l.weight_updates, 1);
 }

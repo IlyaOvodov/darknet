@@ -171,7 +171,7 @@ void update_local_layer(local_layer l, int batch, float learning_rate, float mom
     axpy_cpu(l.outputs, learning_rate/batch, l.bias_updates, 1, l.biases, 1);
     scal_cpu(l.outputs, momentum, l.bias_updates, 1);
 
-    axpy_cpu(size, -decay*batch, l.weights, 1, l.weight_updates, 1);
+    axpy_cpu_decay(size, -abs(decay)*batch, l.weights, 1, l.weight_updates, 1, decay >= 0);
     axpy_cpu(size, learning_rate/batch, l.weight_updates, 1, l.weights, 1);
     scal_cpu(size, momentum, l.weight_updates, 1);
 }
@@ -260,7 +260,7 @@ void update_local_layer_gpu(local_layer l, int batch, float learning_rate, float
     axpy_ongpu(l.outputs, learning_rate/batch, l.bias_updates_gpu, 1, l.biases_gpu, 1);
     scal_ongpu(l.outputs, momentum, l.bias_updates_gpu, 1);
 
-    axpy_ongpu(size, -decay*batch, l.weights_gpu, 1, l.weight_updates_gpu, 1);
+    axpy_ongpu_decay(size, -abs(decay)*batch, l.weights_gpu, 1, l.weight_updates_gpu, 1, decay >= 0);
     axpy_ongpu(size, learning_rate/batch, l.weight_updates_gpu, 1, l.weights_gpu, 1);
     scal_ongpu(size, momentum, l.weight_updates_gpu, 1);
 }
