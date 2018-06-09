@@ -381,11 +381,27 @@ __global__ void axpy_kernel(int N, float ALPHA, float *X, int OFFX, int INCX,  f
     if(i < N) Y[OFFY+i*INCY] += ALPHA*X[OFFX+i*INCX];
 }
 
-__global__ void axpy_kernel_decay_L1(int N, float ALPHA, float *X, int INCX, float *Y, int INCY)
+__global__ void axpy_kernel_decay_L1(int N, float ALPHA, float ALPHA_INC, float *X, int INCX, float *Y, int INCY)
 {
 	int i = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
-	if (i < N) Y[i*INCY] += X[i*INCX] > 0 ? ALPHA : (X[i*INCX] < 0 ? -ALPHA : 0);
+	if (i < N)
+		if (ALPHA_INC)
+			Y[i*INCY] += X[i*INCX] > 0 ? (ALPHA + ALPHA_INC*i/N) : (X[i*INCX] < 0 ? -(ALPHA + ALPHA_INC*i / N) : 0);
+		else
+			Y[i*INCY] += X[i*INCX] > 0 ? ALPHA : (X[i*INCX] < 0 ? -ALPHA : 0);
 }
+
+__global__ void axpy_kernel_decay_L2(int N, float ALPHA, float ALPHA_INC, float *X, int INCX, float *Y, int INCY)
+{
+	int i = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
+	if (i < N)
+		if (ALPHA_INC)
+			Y[i*INCY] += (ALPHA + ALPHA_INC*i / N)*X[i*INCX];
+		else
+			Y[i*INCY] += ALPHA*X[i*INCX];
+}
+
+
 
 __global__ void pow_kernel(int N, float ALPHA, float *X, int INCX, float *Y, int INCY)
 {
@@ -540,13 +556,14 @@ extern "C" void axpy_ongpu(int N, float ALPHA, float * X, int INCX, float * Y, i
 
 extern "C" void axpy_ongpu_decay(int N, float ALPHA, float * X, int INCX, float * Y, int INCY, int use_L2)
 {
+	float ALPHA_INC = ALPHA * 5; // GVNC: as parameter, todo on CPU
 	if (use_L2) {
-		axpy_ongpu(N, ALPHA, X, INCX, Y, INCY);
-	} 
-	else {
-		axpy_kernel_decay_L1 << <cuda_gridsize(N), BLOCK, 0, get_cuda_stream() >> > (N, ALPHA, X, INCX, Y, INCY);
-		check_error(cudaPeekAtLastError());
+		axpy_kernel_decay_L2 << <cuda_gridsize(N), BLOCK, 0, get_cuda_stream() >> > (N, ALPHA, ALPHA_INC, X, INCX, Y, INCY);
 	}
+	else {
+		axpy_kernel_decay_L1 << <cuda_gridsize(N), BLOCK, 0, get_cuda_stream() >> > (N, ALPHA, ALPHA_INC, X, INCX, Y, INCY);
+	}
+	check_error(cudaPeekAtLastError());
 }
 
 extern "C" void pow_ongpu(int N, float ALPHA, float * X, int INCX, float * Y, int INCY)
