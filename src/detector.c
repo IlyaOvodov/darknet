@@ -1334,6 +1334,190 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 	free_network(net);
 }
 
+int weights_size(layer* l)
+{
+	if (l->type == CONNECTED)
+		return l->h*l->w*l->c*l->out_h*l->out_w*l->out_c;
+	if (l->type == CONVOLUTIONAL)
+		return l->c*l->n*l->size*l->size;
+	if (l->type == DECONVOLUTIONAL)
+		return l->c*l->n*l->size*l->size;
+	if (l->type == LOCAL)
+		return l->c*l->n*l->size*l->size*l->out_h*l->out_w;
+	return 0;
+}
+int get_channels_no(layer* l)
+{
+	if (l->type == CONVOLUTIONAL || l->type == DECONVOLUTIONAL)
+		return l->n;
+	return 1;
+}
+
+#define max_hist_sz  1025
+#define max_channels  1024
+void show_weights(char *cfgfile, char *weightfile)
+{
+	char *base = basecfg(cfgfile);
+	printf("%s\n", base);
+	network net = parse_network_cfg(cfgfile);
+	load_weights(&net, weightfile);
+
+#ifdef OPENCV
+	int number_of_lines = 100;
+	int img_size = 1000;
+	int img_offset = 50;
+	int draw_size = img_size - img_offset;
+	CvPoint pt1, pt2, pt_text;
+	char char_buff[100];
+	int i;
+
+	int curr_layer = 0;
+	int hist_sz = 65;
+	int by_channel = 0;
+	int channel_to_show = 0;
+
+	cvNamedWindow("weights_hist", CV_WINDOW_NORMAL);
+	cvMoveWindow("weights_hist", 0, 0);
+	cvResizeWindow("weights_hist", img_size, img_size);
+	CvFont font;
+	cvInitFont(&font, CV_FONT_HERSHEY_COMPLEX_SMALL, 0.7, 0.7, 0, 1, CV_AA);
+
+	int* hist = malloc(max_hist_sz*max_channels*sizeof(int));
+
+	while (1) {
+		IplImage* img = cvCreateImage(cvSize(img_size, img_size), 8, 3);
+		cvSet(img, CV_RGB(255, 255, 255), 0);
+
+		// make hist
+		layer l = net.layers[curr_layer];
+		int weights_sz = weights_size(&l);
+		int channels_no = get_channels_no(&l);
+		int weights_by_channel = weights_sz / channels_no;
+		if (weights_sz) {
+			float w_max = -1000000000.;
+			for (i = 0; i < weights_sz; ++i)
+				w_max = max(w_max, fabs(l.weights[i]));
+			//if (w_max < 1)
+			//	w_max = 1;
+			memset(hist, 0, max_hist_sz*max_channels *sizeof(int));
+			int max_y = 0;
+			for (int i = 0; i < weights_sz; ++i) {
+				int idx = hist_sz*(l.weights[i] + w_max) / (2*w_max);
+				if (idx == hist_sz)
+					idx = hist_sz - 1;
+				int ch_no = (i / weights_by_channel);
+				if (by_channel)
+					idx += ch_no*max_hist_sz;
+				hist[idx] += 1;
+				max_y = max(max_y, hist[idx]);
+			}
+
+			// vertical lines
+			pt1.x = img_offset; pt2.x = img_size-1, pt_text.x = 10;
+			for (i = 1; i <= number_of_lines; ++i) {
+				pt1.y = pt2.y = (float)i * draw_size / number_of_lines;
+				cvLine(img, pt1, pt2, CV_RGB(224, 224, 224), 1, 8, 0);
+				if (i % 10 == 0) {
+					sprintf(char_buff, "%d", max_y*(number_of_lines - i) / number_of_lines);
+					pt_text.y = pt1.y + 5;
+					cvPutText(img, char_buff, pt_text, &font, CV_RGB(0, 0, 0));
+					cvLine(img, pt1, pt2, CV_RGB(128, 128, 128), 1, 8, 0);
+				}
+			}
+			// horizontal lines
+			pt1.y = draw_size; pt2.y = 0, pt_text.y = draw_size + 15;
+			for (i = 0; i <= number_of_lines; ++i) {
+				pt1.x = pt2.x = img_offset + (float)i * draw_size / number_of_lines;
+				cvLine(img, pt1, pt2, CV_RGB(224, 224, 224), 1, 8, 0);
+				if (i % (number_of_lines / 10) == 0) {
+					sprintf(char_buff, "%f", -w_max + (2*w_max) * i / number_of_lines);
+					pt_text.x = pt1.x - 20;
+					cvPutText(img, char_buff, pt_text, &font, CV_RGB(0, 0, 0));
+					cvLine(img, pt1, pt2, CV_RGB(128, 128, 128), 1, 8, 0);
+				}
+			}
+
+			int ch;
+			int channels_no_to_display = by_channel ? get_channels_no(&l) : 1;
+			for (ch = 0; ch < channels_no_to_display; ++ch) {
+				if (by_channel == 2 && ch != channel_to_show)
+					continue;
+				int idx_shift = ch*max_hist_sz;
+				//CvScalar color = slices <= 64 ? CV_RGB(0, 0, s * 255/slices)
+				//	: CV_RGB((s/64*4) % 255, (s/64) % 255, (s % 64)*4);
+				CvScalar color = CV_RGB(ch % 255, ((ch / 16) % 16) * 16, (ch % 32) * 8);
+				pt1.x = pt1.y = 0;
+				for (i = 0; i < hist_sz; ++i) {
+					pt2.x = img_offset + draw_size * (2 * i + 1) / 2 / hist_sz;
+					pt2.y = draw_size - draw_size*hist[idx_shift+i] / max_y;
+					if (i > 0)
+						cvLine(img, pt1, pt2, color, 1, 8, 0);
+					if (hist[idx_shift + i])
+						cvCircle(img, pt2, 3, color, CV_FILLED, 8, 0);
+					pt1 = pt2;
+				}
+			}
+		}
+		else {
+			sprintf(char_buff, "layer type %d doesn't contain weights", l.type);
+			pt1.x = img_size / 2, pt1.y = 100;
+			pt2.x = pt1.x + 250, pt2.y = pt1.y + 20;
+			cvRectangle(img, pt1, pt2, CV_RGB(255, 255, 255), CV_FILLED, 8, 0);
+			pt1.y += 15;
+			cvPutText(img, char_buff, pt1, &font, CV_RGB(0, 0, 0));
+		}
+
+		sprintf(char_buff, "current layer = %d, %d weights %d outputs", curr_layer, weights_sz, channels_no);
+		pt1.x = img_size / 2, pt1.y = 30;
+		pt2.x = pt1.x + 350, pt2.y = pt1.y + 20;
+		cvRectangle(img, pt1, pt2, CV_RGB(255, 255, 255), CV_FILLED, 8, 0);
+		pt1.y += 15;
+		cvPutText(img, char_buff, pt1, &font, CV_RGB(0, 0, 0));
+
+		if (by_channel == 2) {
+			sprintf(char_buff, "current channel = %d of %d", channel_to_show, channels_no);
+			pt1.x = img_size / 2, pt1.y = 80;
+			pt2.x = pt1.x + 350, pt2.y = pt1.y + 20;
+			cvRectangle(img, pt1, pt2, CV_RGB(255, 255, 255), CV_FILLED, 8, 0);
+			pt1.y += 15;
+			cvPutText(img, char_buff, pt1, &font, CV_RGB(0, 0, 0));
+		}
+
+		cvPutText(img, "Press 's' to save: chart_weights.jpg; n/p - next/prev. layer; +/- scale; * - by channel (/ to switch); b break", cvPoint(5, img_size - 10), &font, CV_RGB(0, 0, 0));
+		cvShowImage("weights_hist", img);
+
+		int k = cvWaitKey(0);
+		if (k == 'b')
+			break;
+		if (k == 'n')
+			curr_layer = min(curr_layer+1, net.n-1);
+		if (k == 'p')
+			curr_layer = max(curr_layer - 1, 0);
+		if (k == '+')
+			hist_sz = min(hist_sz/2*4+1, max_hist_sz);
+		if (k == '-')
+			hist_sz = max(hist_sz/4*2+1, 3);
+		if (k == '*')
+			by_channel = (by_channel+1)%3;
+		if (k == '/')
+			channel_to_show = (channel_to_show + 1) % channels_no;
+		if (k == 's')
+			cvSaveImage("chart_weights.jpg", img, 0);
+
+		cvReleaseImage(&img);
+	}
+	cvDestroyAllWindows();
+#else
+	fprintf(stderr, "openCV is reqired for show_weights\n");
+#endif
+
+	// free memory
+	free(hist);
+	free(base);
+	free_network(net);
+}
+
+
 void run_detector(int argc, char **argv)
 {
 	int dont_show = find_arg(argc, argv, "-dont_show");
@@ -1409,5 +1593,6 @@ void run_detector(int argc, char **argv)
 		free_list_contents_kvp(options);
 		free_list(options);
     }
+	else if (0 == strcmp(argv[2], "show_weights")) show_weights(cfg, weights);
 	else printf(" There isn't such command: %s", argv[2]);
 }
