@@ -633,25 +633,25 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 			}
 		}
 
-		if (ext_output && (i % 100 == 0 || i == m-1)) {
-			// reprint header
-			fprintf(stderr, "\n");
-			fprintf(stderr, "                               "
-				"   Labels   Labels(fit class)  "
-				"Propososals  "
-				"Propososals(fit class)  "
-				"Propososals(fit class)/(Propososals with class)"
-				"\n");
-			fprintf(stderr, "Image Correct  Labels RPs/Img  "
-				"IOU,%% Recall  IOU,%% Recall   "
-				"IOU,%% Precision  "
-				"IOU,%% Precision       "
-				"IOU,%% Precision"
-				"\n");
-		}
-		if (ext_output)
-		{
-			fprintf(stderr,
+		if (ext_output) {
+			if (i % 1000 == 0)
+				fprintf(stderr, "%6d ", i);
+			if (i == m-1) {
+				// reprint header
+				fprintf(stderr, "\n");
+				fprintf(stderr, "                               "
+					"   Labels   Labels(fit class)  "
+					"Propososals  "
+					"Propososals(fit class)  "
+					"Propososals(fit class)/(Propososals with class)"
+					"\n");
+				fprintf(stderr, "Image Correct  Labels RPs/Img  "
+					"IOU,%% Recall  IOU,%% Recall   "
+					"IOU,%% Precision  "
+					"IOU,%% Precision       "
+					"IOU,%% Precision"
+					"\n");
+			    fprintf(stderr,
 				"%5d %7d %7d %7.2f  "
 				"%5.2f %5.2f   %5.2f %5.2f    "
 				"%5.2f %5.2f      "
@@ -664,6 +664,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 				proposals_avg_iou_class * 100 / proposals, 100.*correct_class / proposals,
 				proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class
 				);
+			}
 		}
 		else
 		{
