@@ -43,7 +43,7 @@ void upsample_cpu(float *in, int w, int h, int c, int batch, int stride, int for
 #include "cuda.h"
 
 void axpy_ongpu(int N, float ALPHA, float * X, int INCX, float * Y, int INCY);
-void axpy_ongpu_decay(int N, float ALPHA, float * X, int INCX, float * Y, int INCY, int use_L2);
+void axpy_ongpu_decay(int N, float ALPHA, float ALPHA_INC_SCALE, float * X, int INCX, float * Y, int INCY, int use_L2);
 void axpy_ongpu_offset(int N, float ALPHA, float * X, int OFFX, int INCX, float * Y, int OFFY, int INCY);
 void copy_ongpu(int N, float * X, int INCX, float * Y, int INCY);
 void copy_ongpu_offset(int N, float * X, int OFFX, int INCX, float * Y, int OFFY, int INCY);
@@ -83,7 +83,6 @@ void reorg_ongpu(float *x, int w, int h, int c, int batch, int stride, int forwa
 
 void softmax_gpu(float *input, int n, int offset, int groups, float temp, float *output);
 void adam_gpu(int n, float *x, float *m, float *v, float B1, float B2, float rate, float eps, int t);
-void adam_update_gpu(float *w, float *d, float *m, float *v, float B1, float B2, float eps, float decay, float rate, int n, int batch, int t);
 
 void flatten_ongpu(float *x, int spatial, int layers, int batch, int forward, float *out);
 

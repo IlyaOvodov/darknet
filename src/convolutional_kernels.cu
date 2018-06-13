@@ -513,7 +513,7 @@ void update_convolutional_layer_gpu(convolutional_layer layer, int batch, float 
         scal_ongpu(size, layer.B1, layer.m_gpu, 1);
         scal_ongpu(size, layer.B2, layer.v_gpu, 1);
 
-        axpy_ongpu_decay(size, -abs(decay)*batch, layer.weights_gpu, 1, layer.weight_updates_gpu, 1, decay >= 0);
+        axpy_ongpu_decay(size, -abs(decay)*batch, layer.n == 78 ? 0 : 1, layer.weights_gpu, 1, layer.weight_updates_gpu, 1, decay >= 0);
 
         axpy_ongpu(size, -(1-layer.B1), layer.weight_updates_gpu, 1, layer.m_gpu, 1);
         mul_ongpu(size, layer.weight_updates_gpu, 1, layer.weight_updates_gpu, 1);
@@ -530,7 +530,7 @@ void update_convolutional_layer_gpu(convolutional_layer layer, int batch, float 
 		// weight_updates_gpu = (weight_updates_gpu - weights_gpu*decay*batch*subdivision)*momentum = 
 		//  (weight_updates_gpu - weights_gpu * 0.0005 * 64 * 8) * 0.9 = 
 		//  weight_updates_gpu*0.9 - weights_gpu*0.2304
-        axpy_ongpu_decay(size, -abs(decay)*batch, layer.weights_gpu, 1, layer.weight_updates_gpu, 1, decay >= 0);
+        axpy_ongpu_decay(size, -abs(decay)*batch, layer.n == 78 ? 0 : 1, layer.weights_gpu, 1, layer.weight_updates_gpu, 1, decay >= 0);
         axpy_ongpu(size, learning_rate/batch, layer.weight_updates_gpu, 1, layer.weights_gpu, 1);
         scal_ongpu(size, momentum, layer.weight_updates_gpu, 1);
     }

@@ -269,7 +269,7 @@ void update_connected_layer_gpu(connected_layer l, int batch, float learning_rat
         scal_ongpu(l.outputs, momentum, l.scale_updates_gpu, 1);
     }
 
-    axpy_ongpu_decay(l.inputs*l.outputs, -abs(decay)*batch, l.weights_gpu, 1, l.weight_updates_gpu, 1, decay >= 0);
+    axpy_ongpu_decay(l.inputs*l.outputs, -abs(decay)*batch, 0, l.weights_gpu, 1, l.weight_updates_gpu, 1, decay >= 0);
     axpy_ongpu(l.inputs*l.outputs, learning_rate/batch, l.weight_updates_gpu, 1, l.weights_gpu, 1);
     scal_ongpu(l.inputs*l.outputs, momentum, l.weight_updates_gpu, 1);
 }

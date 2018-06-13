@@ -155,20 +155,6 @@ extern "C" void adam_gpu(int n, float *x, float *m, float *v, float B1, float B2
     check_error(cudaPeekAtLastError());
 }
 
-extern "C" void adam_update_gpu(float *w, float *d, float *m, float *v, float B1, float B2, float eps, float decay, float rate, int n, int batch, int t)
-{
-	scal_ongpu(n, B1, m, 1);
-	scal_ongpu(n, B2, v, 1);
-	axpy_ongpu_decay(n, -abs(decay)*batch, w, 1, d, 1, decay>=0);
-
-	axpy_ongpu(n, (1 - B1), d, 1, m, 1);
-	mul_ongpu(n, d, 1, d, 1);
-	axpy_ongpu(n, (1 - B2), d, 1, v, 1);
-
-	adam_gpu(n, w, m, v, B1, B2, rate, eps, t);
-	fill_ongpu(n, 0, d, 1);
-}
-
 __global__ void normalize_kernel(int N, float *x, float *mean, float *variance, int batch, int filters, int spatial)
 {
     int index = (blockIdx.x + blockIdx.y*gridDim.x) * blockDim.x + threadIdx.x;
@@ -554,9 +540,9 @@ extern "C" void axpy_ongpu(int N, float ALPHA, float * X, int INCX, float * Y, i
     axpy_ongpu_offset(N, ALPHA, X, 0, INCX, Y, 0, INCY);
 }
 
-extern "C" void axpy_ongpu_decay(int N, float ALPHA, float * X, int INCX, float * Y, int INCY, int use_L2)
+extern "C" void axpy_ongpu_decay(int N, float ALPHA, float ALPHA_INC_SCALE, float * X, int INCX, float * Y, int INCY, int use_L2)
 {
-	float ALPHA_INC = 0;// ALPHA * 50; // GVNC: as parameter, todo on CPU
+	float ALPHA_INC = ALPHA * ALPHA_INC_SCALE * 50; // GVNC: as parameter, todo on CPU
 	if (use_L2) {
 		axpy_kernel_decay_L2 << <cuda_gridsize(N), BLOCK, 0, get_cuda_stream() >> > (N, ALPHA, ALPHA_INC, X, INCX, Y, INCY);
 	}
