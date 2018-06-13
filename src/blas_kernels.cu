@@ -556,7 +556,7 @@ extern "C" void axpy_ongpu(int N, float ALPHA, float * X, int INCX, float * Y, i
 
 extern "C" void axpy_ongpu_decay(int N, float ALPHA, float * X, int INCX, float * Y, int INCY, int use_L2)
 {
-	float ALPHA_INC = ALPHA * 5; // GVNC: as parameter, todo on CPU
+	float ALPHA_INC = ALPHA * 50; // GVNC: as parameter, todo on CPU
 	if (use_L2) {
 		axpy_kernel_decay_L2 << <cuda_gridsize(N), BLOCK, 0, get_cuda_stream() >> > (N, ALPHA, ALPHA_INC, X, INCX, Y, INCY);
 	}
