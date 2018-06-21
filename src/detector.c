@@ -35,11 +35,16 @@ void draw_train_loss(IplImage* img, int img_size, float avg_loss, float max_img_
 
 static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90};
 
+char** global_names;
+
 void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear, int dont_show)
 {
     list *options = read_data_cfg(datacfg);
     char *train_images = option_find_str(options, "train", "data/train.list");
     char *backup_directory = option_find_str(options, "backup", "/backup/");
+
+	char *name_list = option_find_str(options, "names", "data/names.list");
+	global_names = get_labels(name_list); // TODO free
 
     srand(time(0));
     char *base = basecfg(cfgfile);
@@ -526,6 +531,10 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 	list *plist = get_paths(valid_images);
 	char **paths = (char **)list_to_array(plist);
 
+	char *name_list = option_find_str(options, "names", "data/names.list");
+	char **names = get_labels(name_list);
+	image **alphabet = load_alphabet();
+
 	layer l = net.layers[net.n - 1];
 
 	int m = plist->size;
@@ -556,7 +565,10 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 		int nboxes = 0;
 		int letterbox = 0;
 		detection *dets = get_network_boxes(&net, sized.w, sized.h, thresh, .5, 0, 1, &nboxes, letterbox);
+		//printf("%s: %d boxes.\n", path, nboxes);
 		if (nms) do_nms_obj(dets, nboxes, 1, nms);
+		//printf("%s: %d boxes after nms.\n", path, nboxes);
+		//draw_detections_v3(orig, dets, nboxes, thresh, names, alphabet, l.classes, 1);
 		int selected_detections_num;
 		detection_with_class* selected_detections = get_actual_detections(dets, nboxes, -1 /*no threshould*/, &selected_detections_num);
 
@@ -564,7 +576,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 		replace_image_to_label(path, labelpath);
 
 		int num_labels = 0;
-		box_label *truth = read_boxes(labelpath, &num_labels);
+		box_label *truth = read_boxes_with_names(labelpath, &num_labels, names);
 		int k = 0;
 		for (k = 0; k < selected_detections_num; ++k) {
 			const detection* det_k = &(selected_detections[k].det);
@@ -1269,7 +1281,9 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 		//draw_detections(im, l.w*l.h*l.n, thresh, boxes, probs, names, alphabet, l.classes);
 		int nboxes = 0;
 		detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
+		//printf("%s: %d boxes.\n", input, nboxes);
 		if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+		//printf("%s: %d boxes after nms.\n", input, nboxes);
 		draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
         save_image(im, "predictions");
 		if (!dont_show) {

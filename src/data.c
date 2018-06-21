@@ -164,6 +164,43 @@ box_label *read_boxes(char *filename, int *n)
     return boxes;
 }
 
+box_label *read_boxes_with_names(char *filename, int *n, char **names) {
+	box_label *boxes = calloc(1, sizeof(box_label));
+	FILE *file = fopen(filename, "r");
+	if (!file) {
+		printf("Can't open label file. \n");
+		file_error(filename);
+	}
+	float x, y, h, w;
+	char class_name[256];
+	int id;
+	int count = 0;
+	while (fscanf(file, "%s %f %f %f %f", &class_name, &x, &y, &w, &h) == 5) {
+		boxes = realloc(boxes, (count + 1) * sizeof(box_label));
+		boxes[count].id = -1;
+		id = 0;
+		while (names[id]) {
+			if (strcmp(class_name, names[id]) == 0) {
+				boxes[count].id = id;
+				break;
+			}
+			++id;
+		}
+		boxes[count].x = x + w / 2;
+		boxes[count].y = y + h / 2;
+		boxes[count].h = h;
+		boxes[count].w = w;
+		boxes[count].left = x;
+		boxes[count].right = x + w;
+		boxes[count].top = y;
+		boxes[count].bottom = y + h;
+		++count;
+	}
+	fclose(file);
+	*n = count;
+	return boxes;
+}
+
 void randomize_boxes(box_label *b, int n)
 {
     int i;
@@ -289,6 +326,8 @@ void fill_truth_region(char *path, float *truth, int classes, int num_boxes, int
     free(boxes);
 }
 
+extern char** global_names;
+
 void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, int flip, float dx, float dy, float sx, float sy,
 	int small_object, int net_w, int net_h)
 {
@@ -297,7 +336,7 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
 
 	int count = 0;
 	int i;
-	box_label *boxes = read_boxes(labelpath, &count);
+	box_label *boxes = read_boxes_with_names(labelpath, &count, global_names);
 	float lowest_w = 1.F / net_w;
 	float lowest_h = 1.F / net_h;
 	if (small_object == 1) {
