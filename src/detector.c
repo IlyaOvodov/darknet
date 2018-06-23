@@ -555,6 +555,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 	float avg_iou_class = 0; // sum of IOU by labels fit with best fitting proposal with correct class
 	float proposals_avg_iou = 0;       // sum of IOU by proposals fit with best fitting label
 	float proposals_avg_iou_class = 0; // sum of IOU by proposals fit with best fitting label with correct class
+	float avg_angle[3] = { 0 };
 
 	for (i = 0; i < m; ++i) {
 		char *path = paths[i];
@@ -624,6 +625,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 			float best_iou = 0;
 			float best_iou_class = 0;
 			int k = 0;
+			detection* best_detection = 0;
 			for (k = 0; k < selected_detections_num; ++k) {
 				const detection* det_k = &(selected_detections[k].det);
 				int* best_class_k = &(selected_detections[k].best_class);
@@ -633,6 +635,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 				}
 				if (det_k->objectness > thresh && iou > best_iou_class && *best_class_k == truth[j].id) {
 					best_iou_class = iou;
+					best_detection = det_k;
 				}
 			}
 			avg_iou += best_iou;
@@ -642,6 +645,9 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 			avg_iou_class += best_iou_class;
 			if (best_iou_class > iou_thresh) {
 				++correct_class;
+				avg_angle[0] += fabs(truth[j].ang_x - best_detection->ang_x);
+				avg_angle[1] += fabs(truth[j].ang_y - best_detection->ang_y);
+				avg_angle[2] += fabs(truth[j].ang_z - best_detection->ang_z);
 			}
 		}
 
@@ -668,13 +674,15 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 				"%5.2f %5.2f   %5.2f %5.2f    "
 				"%5.2f %5.2f      "
 				"%5.2f %5.2f           "
-				"%5.2f %5.2f"
+				"%5.2f %5.2f   "
+				"%5.2f %5.2f %5.2f"
 				"\n",
 				i, correct, total, (float)proposals / (i + 1),
 				avg_iou * 100 / total, 100.*correct / total, avg_iou_class * 100 / total, 100.*correct_class / total,
 				proposals_avg_iou * 100 / proposals, 100.*proposals_correct / proposals,
 				proposals_avg_iou_class * 100 / proposals, 100.*correct_class / proposals,
-				proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class
+				proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class,
+				avg_angle[0] * 100 / total, avg_angle[1] * 100 / total, avg_angle[2] * 100 / total
 				);
 			}
 		}

@@ -287,10 +287,12 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 		const int best_class = selected_detections[i].best_class;
 		printf("%s: %.0f%%", names[best_class],	selected_detections[i].det.prob[best_class] * 100);
 		if (ext_output)
-			printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)\n",
+			printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f  angl: %4.2f %4.2f %4.2f )\n",
 				(selected_detections[i].det.bbox.x - selected_detections[i].det.bbox.w / 2)*im.w,
 				(selected_detections[i].det.bbox.y - selected_detections[i].det.bbox.h / 2)*im.h,
-				selected_detections[i].det.bbox.w*im.w, selected_detections[i].det.bbox.h*im.h);
+				selected_detections[i].det.bbox.w*im.w, selected_detections[i].det.bbox.h*im.h,
+				selected_detections[i].det.ang_x, selected_detections[i].det.ang_y, selected_detections[i].det.ang_z
+				);
 		else
 			printf("\n");
 		int j;
@@ -347,6 +349,40 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 			//sprintf(labelstr, "%d x %d - w: %d, h: %d", b_x_center, b_y_center, b_width, b_height);
 
 			draw_box_width(im, left, top, right, bot, width, red, green, blue);
+
+			// draw direction vector
+			float ang = selected_detections[i].det.ang_z * CV_PI / 2;
+			float tan_ang = tan(ang);
+			float x0 = b.x*im.w;
+			float y0 = b.y*im.h;
+			if (fabs(tan_ang) < 1)
+			{
+				int dx = 0;
+				for (dx = 0; dx <= b.w*im.w/2; ++dx) {
+					int x = x0 + dx;
+					int y = y0 + dx*tan_ang;
+					if (x > 0 && y > 0 && x < im.w && y < im.h) {
+						im.data[x + y*im.w + 0 * im.w*im.h] = red;
+						im.data[x + y*im.w + 1 * im.w*im.h] = green;
+						im.data[x + y*im.w + 2 * im.w*im.h] = blue;
+					}
+				}
+			}
+			else
+			{
+				int dy = 0;
+				for (dy = 0; dy <= b.h*im.h / 2; ++dy) {
+					int y = y0 + dy;
+					int x = x0 + dy/tan_ang;
+					if (x > 0 && y > 0 && x < im.w && y < im.h) {
+						im.data[x + y*im.w + 0 * im.w*im.h] = red;
+						im.data[x + y*im.w + 1 * im.w*im.h] = green;
+						im.data[x + y*im.w + 2 * im.w*im.h] = blue;
+					}
+				}
+			}
+
+
 			if (alphabet) {
 				char labelstr[4096] = { 0 };
 				strcat(labelstr, names[selected_detections[i].best_class]);

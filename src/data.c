@@ -172,10 +172,11 @@ box_label *read_boxes_with_names(char *filename, int *n, char **names) {
 		file_error(filename);
 	}
 	float x, y, h, w;
+	float ang_x, ang_y, ang_z; // углы (+-90o -> +-1)
 	char class_name[256];
 	int id;
 	int count = 0;
-	while (fscanf(file, "%s %f %f %f %f", &class_name, &x, &y, &w, &h) == 5) {
+	while (fscanf(file, "%s %f %f %f %f %f %f %f", &class_name, &x, &y, &w, &h, &ang_x, &ang_y, &ang_z) == 8) {
 		boxes = realloc(boxes, (count + 1) * sizeof(box_label));
 		boxes[count].id = -1;
 		id = 0;
@@ -186,14 +187,32 @@ box_label *read_boxes_with_names(char *filename, int *n, char **names) {
 			}
 			++id;
 		}
-		boxes[count].x = x + w / 2;
-		boxes[count].y = y + h / 2;
+		// Вариант, когда указан угол:
+		//boxes[count].x = x + w / 2;
+		//boxes[count].y = y + h / 2;
+		//boxes[count].h = h;
+		//boxes[count].w = w;
+		//boxes[count].left = x;
+		//boxes[count].right = x + w;
+		//boxes[count].top = y;
+		//boxes[count].bottom = y + h;
+
+		// Вариант, когда указан центр:
+		boxes[count].x = x;
+		boxes[count].y = y;
 		boxes[count].h = h;
 		boxes[count].w = w;
-		boxes[count].left = x;
-		boxes[count].right = x + w;
-		boxes[count].top = y;
-		boxes[count].bottom = y + h;
+		boxes[count].left = x - w / 2;
+		boxes[count].right = x + w / 2;
+		boxes[count].top = y - h / 2;
+		boxes[count].bottom = y + h / 2;
+
+		boxes[count].ang_x = ang_x / 3.1415926535897932384626433832795; // GVNC - издержки первой подготовки данных
+		boxes[count].ang_y = ang_y / 3.1415926535897932384626433832795;
+		boxes[count].ang_z = ang_z / 3.1415926535897932384626433832795;
+
+		boxes[count].id2 = 0; // не используем пока
+
 		++count;
 	}
 	fclose(file);
@@ -350,6 +369,8 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
 	if (count > num_boxes) count = num_boxes;
 	float x, y, w, h;
 	int id;
+	float ang_x, ang_y, ang_z;
+	int id2;
 
 	for (i = 0; i < count; ++i) {
 		x = boxes[i].x;
@@ -357,6 +378,10 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
 		w = boxes[i].w;
 		h = boxes[i].h;
 		id = boxes[i].id;
+		ang_x = boxes[i].ang_x;
+		ang_y = boxes[i].ang_y;
+		ang_z = boxes[i].ang_z;
+		id2 = boxes[i].id2;
 
 		// not detect small objects
 		//if ((w < 0.001F || h < 0.001F)) continue;
@@ -401,12 +426,17 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
 		if (x == 0) x += lowest_w;
 		if (y == 0) y += lowest_h;
 
-        truth[i*5+0] = x;
-        truth[i*5+1] = y;
-        truth[i*5+2] = w;
-        truth[i*5+3] = h;
-        truth[i*5+4] = id;
-    }
+		if (ang_x < -1 || ang_x > 1 || ang_y < -1 || ang_y > 1 || ang_z < -1 || ang_z > 1) {
+			printf("\n Wrong annotation: ang_x = %f, ang_y = %f, ang_z = %f \n", ang_x, ang_y, ang_z);
+			sprintf(buff, "echo %s \"Wrong annotation: ang_x = %f, ang_y = %f, ang_z = %f\" >> bad_label.list", labelpath, ang_x, ang_y, ang_z);
+			system(buff);
+			continue;
+		}
+
+		truth_record truth_buf = { x,y,w,h,id,ang_x,ang_y,ang_z,id2 };
+		truth_record* p_truth = (truth_record*)(truth + i*kTruthRecordSz);
+		*p_truth = truth_buf;
+	}
     free(boxes);
 }
 
@@ -764,7 +794,7 @@ data load_data_detection(int n, char **paths, int m, int w, int h, int c, int bo
     d.X.vals = calloc(d.X.rows, sizeof(float*));
     d.X.cols = h*w*c;
 
-    d.y = make_matrix(n, 5*boxes);
+    d.y = make_matrix(n, kTruthRecordSz * boxes);
     for(i = 0; i < n; ++i){
 		const char *filename = random_paths[i];
 
@@ -832,7 +862,7 @@ data load_data_detection(int n, char **paths, int m, int w, int h, int c, int bo
 	d.X.vals = calloc(d.X.rows, sizeof(float*));
 	d.X.cols = h*w*c;
 
-	d.y = make_matrix(n, 5 * boxes);
+	d.y = make_matrix(n, kTruthRecordSz * boxes);
 	for (i = 0; i < n; ++i) {
 		image orig = load_image(random_paths[i], 0, 0, c);
 

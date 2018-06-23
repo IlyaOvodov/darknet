@@ -31,6 +31,7 @@ typedef struct detection {
 	float *mask;
 	float objectness;
 	int sort_class;
+	float ang_x, ang_y, ang_z; // углы (+-90o -> +-1)
 } detection;
 
 typedef struct detection_with_class {

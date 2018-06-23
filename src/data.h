@@ -73,7 +73,24 @@ typedef struct{
     int id;
     float x,y,w,h;
     float left, right, top, bottom;
+	float ang_x, ang_y, ang_z; // углы (+-90o -> +-1)
+	int id2;
 } box_label;
+
+typedef struct {
+	box bbox;
+	float id;
+	float ang_x, ang_y, ang_z; // углы (+-90o -> +-1)
+	float id2;
+} truth_record;
+
+static const int kTruthRecordSz = sizeof(truth_record) / sizeof(float); // Were 5, now 9
+
+static const int kYoloOutputBoxIndex = 0;
+static const int kYoloOutputObjectnessIndex = 4;
+static const int kYoloOutputAngIndex = 5;
+static const int kYoloOutputClassIndex = 8;
+static const int kYoloOutputBaseSz = 8; // x,y,w,h, obj, ang_x,ang_y,ang_z, + classes*number
 
 void free_data(data d);
 
