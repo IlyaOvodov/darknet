@@ -10,7 +10,10 @@
 #include <string.h>
 #include <stdlib.h>
 
-layer make_yolo_layer(int batch, int w, int h, int n, int total, int *mask, int classes, int max_boxes)
+int yolo_output_class_index(layer* l) { return kYoloOutputExtraFeaturesIndex + l->extra_features_num; }
+int yolo_output_base_size(layer* l)   { return kYoloOutputExtraFeaturesIndex + l->extra_features_num; } // size of header up to classes_prob[classes number]
+
+layer make_yolo_layer(int batch, int w, int h, int n, int total, int *mask, int classes, int max_boxes, int extra_features_num)
 {
     int i;
     layer l = {0};
@@ -21,7 +24,8 @@ layer make_yolo_layer(int batch, int w, int h, int n, int total, int *mask, int 
     l.batch = batch;
     l.h = h;
     l.w = w;
-    l.c = n*(classes + kYoloOutputBaseSz);
+	l.extra_features_num = extra_features_num;
+    l.c = n*(classes + yolo_output_base_size(&l));
     l.out_w = l.w;
     l.out_h = l.h;
     l.out_c = l.c;
@@ -108,12 +112,12 @@ float delta_yolo_box(box truth, float *x, float *biases, int n, int index, int i
     return iou;
 }
 
-void delta_yolo_angle(float *output, float *delta, int index, truth_record* truth, float* avg_ang_err, int stride)
+void delta_yolo_extra_features(float *output, float *delta, int index, truth_record* truth, float* avg_ang_err, int stride)
 {
 	int i;
 	// default
-	for (i = 0; i < 3; ++i) {
-		delta[index + stride*i] = *(&(truth->ang_x)+i) - output[index + stride*i];
+	for (i = 0; i < truth->extra_features_num; ++i) {
+		delta[index + stride*i] = truth->extra_features[i] - output[index + stride*i];
 		avg_ang_err[i] += fabs(delta[index + stride*i]);
 	}
 }
@@ -159,7 +163,7 @@ static int entry_index(layer l, int batch, int location, int entry)
 {
     int n =   location / (l.w*l.h);
     int loc = location % (l.w*l.h);
-    return batch*l.outputs + n*l.w*l.h*(kYoloOutputBaseSz + l.classes) + entry*l.w*l.h + loc;
+    return batch*l.outputs + n*l.w*l.h*(yolo_output_base_size(&l) + l.classes) + entry*l.w*l.h + loc;
 }
 
 static box float_to_box_stride(float *f, int stride)
@@ -184,9 +188,10 @@ void forward_yolo_layer(const layer l, network_state state)
             activate_array(l.output + index, 2*l.w*l.h, LOGISTIC);
             index =     entry_index(l, b, n*l.w*l.h, kYoloOutputObjectnessIndex);
 			activate_array(l.output + index, l.w*l.h, LOGISTIC);
-			index = entry_index(l, b, n*l.w*l.h, kYoloOutputAngIndex);
-			activate_array(l.output + index, 3*l.w*l.h, TANH);
-			index = entry_index(l, b, n*l.w*l.h, kYoloOutputClassIndex);
+			index = entry_index(l, b, n*l.w*l.h, kYoloOutputExtraFeaturesIndex);
+			if (l.extra_features_num)
+				activate_array(l.output + index, l.extra_features_num*l.w*l.h, TANH);
+			index = entry_index(l, b, n*l.w*l.h, yolo_output_class_index(l));
 			activate_array(l.output + index, l.classes*l.w*l.h, LOGISTIC);
         }
     }
@@ -200,7 +205,7 @@ void forward_yolo_layer(const layer l, network_state state)
     float avg_cat = 0;
     float avg_obj = 0;
     float avg_anyobj = 0;
-    float avg_ang_err[3] = {0};
+    float avg_ang_err[EXTRA_FEATURES_NUM] = {0};
     int count = 0;
     int class_count = 0;
     *(l.cost) = 0;
@@ -232,10 +237,11 @@ void forward_yolo_layer(const layer l, network_state state)
                     avg_anyobj += l.output[obj_index];
                     truth_record* truth_ptr = (truth_record*)(state.truth + best_t*kTruthRecordSz + b*l.truths);
                     l.delta[obj_index] = 0 - l.output[obj_index];
-                    int ang_index = entry_index(l, b, n*l.w*l.h + j*l.w + i, kYoloOutputAngIndex);
-                    l.delta[ang_index] = 0;
-                    l.delta[ang_index+ l.w*l.h*1] = 0;
-                    l.delta[ang_index+ l.w*l.h*2] = 0;
+					int ef_i;
+					for (ef_i = 0; ef_i < l.extra_features_num; ++ef_i) {
+						int ang_index = entry_index(l, b, n*l.w*l.h + j*l.w + i, kYoloOutputExtraFeaturesIndex+ef_i);
+						l.delta[ang_index] = 0;
+					}
                     if (best_iou > l.ignore_thresh) {
                         l.delta[obj_index] = 0;
                     }
@@ -244,7 +250,7 @@ void forward_yolo_layer(const layer l, network_state state)
 
 						int class_id = truth_ptr->id;
                         if (l.map) class_id = l.map[class_id];
-                        int class_index = entry_index(l, b, n*l.w*l.h + j*l.w + i, kYoloOutputClassIndex);
+                        int class_index = entry_index(l, b, n*l.w*l.h + j*l.w + i, yolo_output_class_index(&l));
                         delta_yolo_class(l.output, l.delta, class_index, class_id, l.classes, l.w*l.h, 0, l.focal_loss);
                         box truth = truth_ptr->bbox;
                         delta_yolo_box(truth, l.output, l.biases, l.mask[n], box_index, i, j, l.w, l.h, state.net.w, state.net.h, l.delta, (2-truth.w*truth.h), l.w*l.h);
@@ -286,10 +292,10 @@ void forward_yolo_layer(const layer l, network_state state)
                 l.delta[obj_index] = 1 - l.output[obj_index];
 
                 if (l.map) class_id = l.map[class_id];
-                int class_index = entry_index(l, b, mask_n*l.w*l.h + j*l.w + i, kYoloOutputClassIndex);
+                int class_index = entry_index(l, b, mask_n*l.w*l.h + j*l.w + i, yolo_output_class_index(&l));
                 delta_yolo_class(l.output, l.delta, class_index, class_id, l.classes, l.w*l.h, &avg_cat, l.focal_loss);
-				int ang_index = entry_index(l, b, mask_n*l.w*l.h + j*l.w + i, kYoloOutputAngIndex);
-				delta_yolo_angle(l.output, l.delta, ang_index, truth_ptr, avg_ang_err, l.w*l.h);
+				int ef_index = entry_index(l, b, mask_n*l.w*l.h + j*l.w + i, kYoloOutputExtraFeaturesIndex);
+				delta_yolo_extra_features(l.output, l.delta, ef_index, truth_ptr, avg_ang_err, l.w*l.h);
 
                 ++count;
                 ++class_count;
@@ -300,8 +306,14 @@ void forward_yolo_layer(const layer l, network_state state)
         }
     }
     *(l.cost) = pow(mag_array(l.delta, l.outputs * l.batch), 2);
-    printf("Region %d Avg IOU: %f, ang: %f %f %f, Class: %f, Obj: %f, No Obj: %f, .5R: %f, .75R: %f,  count: %d\n", state.index, avg_iou/count
-		, avg_ang_err[0] / count, avg_ang_err[1] / count, avg_ang_err[2] / count, avg_cat/class_count, avg_obj/count, avg_anyobj/(l.w*l.h*l.n*l.batch), recall/count, recall75/count, count);
+    printf("Region %d Avg IOU: %f", state.index, avg_iou/count);
+	int ef_i;
+	for (ef_i = 0; ef_i < l.extra_features_num; ++ef_i) {
+		if (ef_i ==0)
+			printf(", ang:");
+		printf(" %f", avg_ang_err[ef_i] / count);
+	}
+	printf(", Class: %f, Obj: %f, No Obj: %f, .5R: %f, .75R: %f,  count: %d\n", avg_cat / class_count, avg_obj / count, avg_anyobj / (l.w*l.h*l.n*l.batch), recall / count, recall75 / count, count);
 }
 
 void backward_yolo_layer(const layer l, network_state state)
@@ -387,7 +399,7 @@ void avg_flipped_yolo(layer l)
 
 int get_yolo_detections(layer l, int w, int h, int netw, int neth, float thresh, int *map, int relative, detection *dets, int letter)
 {
-    int i,j,n;
+    int i,j,n, ef_i;
     float *predictions = l.output;
     if (l.batch == 2) avg_flipped_yolo(l);
     int count = 0;
@@ -400,14 +412,14 @@ int get_yolo_detections(layer l, int w, int h, int netw, int neth, float thresh,
             if(objectness <= thresh) continue;
             int box_index  = entry_index(l, 0, n*l.w*l.h + i, 0);
             dets[count].bbox = get_yolo_box(predictions, l.biases, l.mask[n], box_index, col, row, l.w, l.h, netw, neth, l.w*l.h);
-			int ang_index = entry_index(l, 0, n*l.w*l.h + i, kYoloOutputAngIndex);
-			dets[count].ang_x = predictions[ang_index];
-			dets[count].ang_y = predictions[ang_index + l.w*l.h*1];
-			dets[count].ang_z = predictions[ang_index + l.w*l.h*2];
+			for (ef_i=0; ef_i < dets[count].extra_features_num; ++ef_i) {
+				int ef_index = entry_index(l, 0, n*l.w*l.h + i, kYoloOutputExtraFeaturesIndex + ef_i);
+				dets[count].extra_features[ef_i] = predictions[ef_index];
+			}
 			dets[count].objectness = objectness;
             dets[count].classes = l.classes;
             for(j = 0; j < l.classes; ++j){
-                int class_index = entry_index(l, 0, n*l.w*l.h + i, kYoloOutputClassIndex + j);
+                int class_index = entry_index(l, 0, n*l.w*l.h + i, yolo_output_class_index(&l) + j);
                 float prob = objectness*predictions[class_index];
                 dets[count].prob[j] = (prob > thresh) ? prob : 0;
 				dets[count].prob_raw[j] = prob;
@@ -431,9 +443,10 @@ void forward_yolo_layer_gpu(const layer l, network_state state)
             activate_array_ongpu(l.output_gpu + index, 2*l.w*l.h, LOGISTIC);
             index = entry_index(l, b, n*l.w*l.h, kYoloOutputObjectnessIndex);
             activate_array_ongpu(l.output_gpu + index, l.w*l.h, LOGISTIC);
-            index = entry_index(l, b, n*l.w*l.h, kYoloOutputAngIndex);
-            activate_array_ongpu(l.output_gpu + index, 3 * l.w*l.h, TANH);
-            index = entry_index(l, b, n*l.w*l.h, kYoloOutputClassIndex);
+            index = entry_index(l, b, n*l.w*l.h, kYoloOutputExtraFeaturesIndex);
+			if (l.extra_features_num)
+				activate_array_ongpu(l.output_gpu + index, l.extra_features_num * l.w*l.h, TANH);
+            index = entry_index(l, b, n*l.w*l.h, yolo_output_class_index(&l));
             activate_array_ongpu(l.output_gpu + index, l.classes*l.w*l.h, LOGISTIC);
         }
     }

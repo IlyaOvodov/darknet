@@ -15,6 +15,8 @@
 #endif
 #endif
 
+#define EXTRA_FEATURES_NUM 3 // Number of features other then coords and class
+
 typedef struct{
     float x, y, w, h;
 } box;
@@ -31,7 +33,8 @@ typedef struct detection {
 	float *mask;
 	float objectness;
 	int sort_class;
-	float ang_x, ang_y, ang_z; // углы (+-90o -> +-1)
+	float extra_features[EXTRA_FEATURES_NUM];
+	int extra_features_num;
 } detection;
 
 typedef struct detection_with_class {

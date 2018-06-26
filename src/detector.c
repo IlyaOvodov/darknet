@@ -39,6 +39,7 @@ void draw_train_loss(IplImage* img, int img_size, float avg_loss, float max_img_
 static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90};
 
 char** global_names;
+int global_extra_features_num;
 
 void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear, int dont_show)
 {
@@ -72,6 +73,8 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     }
     srand(time(0));
     network net = nets[0];
+
+	global_extra_features_num = net.extra_features_num;
 
 	if ((net.batch * net.subdivisions) == 1) {
 		printf("\n Error: You set incorrect value batch=1 for Training! You should set batch=64 subdivision=64 \n");
@@ -558,7 +561,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 	float avg_iou_class = 0; // sum of IOU by labels fit with best fitting proposal with correct class
 	float proposals_avg_iou = 0;       // sum of IOU by proposals fit with best fitting label
 	float proposals_avg_iou_class = 0; // sum of IOU by proposals fit with best fitting label with correct class
-	float avg_angle[3] = { 0 };
+	float avg_angle[EXTRA_FEATURES_NUM] = { 0 };
 
 	for (i = 0; i < m; ++i) {
 		char *path = paths[i];
@@ -580,7 +583,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 		replace_image_to_label(path, labelpath);
 
 		int num_labels = 0;
-		box_label *truth = read_boxes_with_names(labelpath, &num_labels, names);
+		box_label *truth = read_boxes_with_names(labelpath, &num_labels, names, net.extra_features_num);
 		int k = 0;
 		for (k = 0; k < selected_detections_num; ++k) {
 			const detection* det_k = &(selected_detections[k].det);
@@ -648,9 +651,9 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 			avg_iou_class += best_iou_class;
 			if (best_iou_class > iou_thresh) {
 				++correct_class;
-				avg_angle[0] += fabs(truth[j].ang_x - best_detection->ang_x);
-				avg_angle[1] += fabs(truth[j].ang_y - best_detection->ang_y);
-				avg_angle[2] += fabs(truth[j].ang_z - best_detection->ang_z);
+				int ef_i;
+				for (ef_i = 0; ef_i < net.extra_features_num; ++ef_i)
+					avg_angle[ef_i] += fabs(truth[j].extra_features[ef_i] - best_detection->extra_features[ef_i]);
 			}
 		}
 
@@ -677,16 +680,16 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 				"%5.2f %5.2f   %5.2f %5.2f    "
 				"%5.2f %5.2f      "
 				"%5.2f %5.2f           "
-				"%5.2f %5.2f   "
-				"%5.2f %5.2f %5.2f"
-				"\n",
+				"%5.2f %5.2f   ",
 				i, correct, total, (float)proposals / (i + 1),
 				avg_iou * 100 / total, 100.*correct / total, avg_iou_class * 100 / total, 100.*correct_class / total,
 				proposals_avg_iou * 100 / proposals, 100.*proposals_correct / proposals,
 				proposals_avg_iou_class * 100 / proposals, 100.*correct_class / proposals,
-				proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class,
-				avg_angle[0] * 100 / total, avg_angle[1] * 100 / total, avg_angle[2] * 100 / total
-				);
+				proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class);
+				int ef_i;
+				for (ef_i = 0; ef_i < net.extra_features_num; ++ef_i)
+					fprintf(stderr, "%5.2f ", avg_angle[ef_i] * 100 / total);
+				fprintf(stderr, "\n");
 			}
 		}
 		else
@@ -1298,12 +1301,12 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 
 		for (int idet = 0; idet < nboxes; ++idet) {
 			for (int i_cl = 0; i_cl < dets[idet].classes; ++i_cl) {
-				if (dets[idet].prob[i_cl] > thresh) {
+				if (dets[idet].prob[i_cl] > thresh && dets[idet].extra_features_num >= 3) {
 					CvRect input_roi = { dets[idet].bbox.x*im.w - dets[idet].bbox.w*im.w / 2,
 						dets[idet].bbox.y*im.h - dets[idet].bbox.h*im.h / 2, dets[idet].bbox.w*im.w, dets[idet].bbox.h*im.h };
 					IplImage* input_image = image_to_ipl(im);
 					IplImage* restored_mat = RestoreImage(input_image, input_roi,
-						dets[idet].ang_x, dets[idet].ang_y, dets[idet].ang_z);
+						dets[idet].extra_features[0], dets[idet].extra_features[1], dets[idet].extra_features[2]);
 					image restored = ipl_to_image(restored_mat);
 					save_image(restored, "predictions_restore");
 					if (!dont_show) {

@@ -72,6 +72,7 @@ typedef struct network{
 	size_t *max_output16_size;
 	int wait_stream;
     #endif
+	int extra_features_num;
 } network;
 
 typedef struct network_state {

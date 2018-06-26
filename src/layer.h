@@ -155,6 +155,8 @@ struct layer{
     float probability;
     float scale;
 
+	int extra_features_num; // for Yolo layer 
+
     int *indexes;
     float *rand;
     float *cost;

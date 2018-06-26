@@ -157,6 +157,7 @@ box_label *read_boxes(char *filename, int *n)
         boxes[count].right  = x + w/2;
         boxes[count].top    = y - h/2;
         boxes[count].bottom = y + h/2;
+		boxes[count].extra_features_num = 0;
         ++count;
     }
     fclose(file);
@@ -164,7 +165,7 @@ box_label *read_boxes(char *filename, int *n)
     return boxes;
 }
 
-box_label *read_boxes_with_names(char *filename, int *n, char **names) {
+box_label *read_boxes_with_names(char *filename, int *n, char **names, int extra_features_num) {
 	box_label *boxes = calloc(1, sizeof(box_label));
 	FILE *file = fopen(filename, "r");
 	if (!file) {
@@ -172,11 +173,15 @@ box_label *read_boxes_with_names(char *filename, int *n, char **names) {
 		file_error(filename);
 	}
 	float x, y, h, w;
-	float ang_x, ang_y, ang_z; // углы (+-90o -> +-1)
+	float ang_x[EXTRA_FEATURES_NUM]; // углы (+-90o -> +-1)
 	char class_name[256];
 	int id;
 	int count = 0;
-	while (fscanf(file, "%s %f %f %f %f %f %f %f", &class_name, &x, &y, &w, &h, &ang_x, &ang_y, &ang_z) == 8) {
+	if (extra_features_num > 3)
+		error("More then 3 extra_features can't be read");
+	if (extra_features_num > EXTRA_FEATURES_NUM)
+		error("More then EXTRA_FEATURES_NUM extra_features can't be read");
+	while (fscanf(file, "%s%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f", &class_name, &x, &y, &w, &h, ang_x, ang_x+1, ang_x+2) == 5 + extra_features_num) {
 		boxes = realloc(boxes, (count + 1) * sizeof(box_label));
 		boxes[count].id = -1;
 		id = 0;
@@ -207,11 +212,10 @@ box_label *read_boxes_with_names(char *filename, int *n, char **names) {
 		boxes[count].top = y - h / 2;
 		boxes[count].bottom = y + h / 2;
 
-		boxes[count].ang_x = ang_x / 3.1415926535897932384626433832795; // GVNC - издержки первой подготовки данных
-		boxes[count].ang_y = ang_y / 3.1415926535897932384626433832795;
-		boxes[count].ang_z = ang_z / 3.1415926535897932384626433832795;
-
-		boxes[count].id2 = 0; // не используем пока
+		boxes[count].extra_features_num = extra_features_num;
+		int ef_i;
+		for (ef_i=0; ef_i<boxes[count].extra_features_num; ++ef_i)
+			boxes[count].extra_features[ef_i] = ang_x[ef_i];
 
 		++count;
 	}
@@ -346,6 +350,7 @@ void fill_truth_region(char *path, float *truth, int classes, int num_boxes, int
 }
 
 extern char** global_names;
+extern int global_extra_features_num;
 
 void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, int flip, float dx, float dy, float sx, float sy,
 	int small_object, int net_w, int net_h)
@@ -355,7 +360,7 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
 
 	int count = 0;
 	int i;
-	box_label *boxes = read_boxes_with_names(labelpath, &count, global_names);
+	box_label *boxes = read_boxes_with_names(labelpath, &count, global_names, global_extra_features_num);
 	float lowest_w = 1.F / net_w;
 	float lowest_h = 1.F / net_h;
 	if (small_object == 1) {
@@ -369,8 +374,6 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
 	if (count > num_boxes) count = num_boxes;
 	float x, y, w, h;
 	int id;
-	float ang_x, ang_y, ang_z;
-	int id2;
 
 	for (i = 0; i < count; ++i) {
 		x = boxes[i].x;
@@ -378,10 +381,6 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
 		w = boxes[i].w;
 		h = boxes[i].h;
 		id = boxes[i].id;
-		ang_x = boxes[i].ang_x;
-		ang_y = boxes[i].ang_y;
-		ang_z = boxes[i].ang_z;
-		id2 = boxes[i].id2;
 
 		// not detect small objects
 		//if ((w < 0.001F || h < 0.001F)) continue;
@@ -426,14 +425,22 @@ void fill_truth_detection(char *path, int num_boxes, float *truth, int classes, 
 		if (x == 0) x += lowest_w;
 		if (y == 0) y += lowest_h;
 
-		if (ang_x < -1 || ang_x > 1 || ang_y < -1 || ang_y > 1 || ang_z < -1 || ang_z > 1) {
-			printf("\n Wrong annotation: ang_x = %f, ang_y = %f, ang_z = %f \n", ang_x, ang_y, ang_z);
-			sprintf(buff, "echo %s \"Wrong annotation: ang_x = %f, ang_y = %f, ang_z = %f\" >> bad_label.list", labelpath, ang_x, ang_y, ang_z);
-			system(buff);
+		int ef_i;
+		int ef_err = 0;
+		for (ef_i = 0; ef_i < boxes[i].extra_features_num; ++ef_i)
+			if (boxes[i].extra_features[ef_i] < -1 || boxes[i].extra_features[ef_i] > 1) {
+				printf("\n Wrong annotation: extra_features[%d] = %f\n", ef_i, boxes[i].extra_features[ef_i]);
+				sprintf(buff, "echo %s \"Wrong annotation: extra_features[%d] = %f\" >> bad_label.list", labelpath, ef_i, boxes[i].extra_features[ef_i]);
+				system(buff);
+				ef_err = 1;
+			}
+		if (ef_err)
 			continue;
-		}
 
-		truth_record truth_buf = { x,y,w,h,id,ang_x,ang_y,ang_z,id2 };
+		truth_record truth_buf = { x,y,w,h,id };
+		for (ef_i = 0; ef_i < boxes[i].extra_features_num; ++ef_i)
+			truth_buf.extra_features[ef_i] = boxes[i].extra_features[ef_i];
+		truth_buf.extra_features_num = boxes[i].extra_features_num;
 		truth_record* p_truth = (truth_record*)(truth + i*kTruthRecordSz);
 		*p_truth = truth_buf;
 	}
