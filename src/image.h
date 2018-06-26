@@ -8,6 +8,10 @@
 #include <math.h>
 #include "box.h"
 
+#ifdef OPENCV
+#include "opencv2/core/core_c.h"
+#endif // OPENCV
+
 typedef struct {
 	int w;
 	int h;
@@ -87,5 +91,11 @@ image get_image_layer(image m, int l);
 
 YOLODLL_API void free_image(image m);
 void test_resize(char *filename);
+
+#ifdef OPENCV
+image ipl_to_image(IplImage* src);
+IplImage* image_to_ipl(image src);
+#endif // OPENCV
+
 #endif
 

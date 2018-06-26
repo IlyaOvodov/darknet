@@ -10,6 +10,7 @@
 #include "box.h"
 #include "demo.h"
 #include "option_list.h"
+#include "image.h"
 
 #ifdef OPENCV
 #include "opencv2/highgui/highgui_c.h"
@@ -17,6 +18,8 @@
 //#include "opencv2/core/core.hpp"
 #include "opencv2/core/version.hpp"
 #include "opencv2/imgproc/imgproc_c.h"
+
+#include "BarcodeDemo.h"
 
 #ifndef CV_VERSION_EPOCH
 #include "opencv2/videoio/videoio_c.h"
@@ -1292,6 +1295,27 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 		//printf("%s: %d boxes.\n", input, nboxes);
 		if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
 		//printf("%s: %d boxes after nms.\n", input, nboxes);
+
+		for (int idet = 0; idet < nboxes; ++idet) {
+			for (int i_cl = 0; i_cl < dets[idet].classes; ++i_cl) {
+				if (dets[idet].prob[i_cl] > thresh) {
+					CvRect input_roi = { dets[idet].bbox.x*im.w - dets[idet].bbox.w*im.w / 2,
+						dets[idet].bbox.y*im.h - dets[idet].bbox.h*im.h / 2, dets[idet].bbox.w*im.w, dets[idet].bbox.h*im.h };
+					IplImage* input_image = image_to_ipl(im);
+					IplImage* restored_mat = RestoreImage(input_image, input_roi,
+						dets[idet].ang_x, dets[idet].ang_y, dets[idet].ang_z);
+					image restored = ipl_to_image(restored_mat);
+					save_image(restored, "predictions_restore");
+					if (!dont_show) {
+						show_image(restored, "predictions_restore");
+					}
+					cvReleaseImage(&input_image);
+					cvReleaseImage(&restored_mat);
+					break;
+				}
+			}
+		}
+
 		draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
         save_image(im, "predictions");
 		if (!dont_show) {

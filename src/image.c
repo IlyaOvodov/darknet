@@ -989,6 +989,26 @@ image ipl_to_image(IplImage* src)
     return out;
 }
 
+IplImage* image_to_ipl(image src)
+{
+	IplImage* out = cvCreateImage(cvSize(src.w, src.h), IPL_DEPTH_8U,  src.c);
+	unsigned char *data = (unsigned char *)out->imageData;
+	int h = out->height;
+	int w = out->width;
+	int c = out->nChannels;
+	int step = out->widthStep;
+	int i, j, k, count = 0;
+
+	for (k = 0; k < c; ++k) {
+		for (i = 0; i < h; ++i) {
+			for (j = 0; j < w; ++j) {
+				data[i*step + j*c + k] = src.data[count++] * 255.;
+			}
+		}
+	}
+	return out;
+}
+
 image load_image_cv(char *filename, int channels)
 {
     IplImage* src = 0;
