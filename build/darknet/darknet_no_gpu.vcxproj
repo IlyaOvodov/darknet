@@ -172,6 +172,7 @@
     <ClCompile Include="..\..\src\activation_layer.c" />
     <ClCompile Include="..\..\src\art.c" />
     <ClCompile Include="..\..\src\avgpool_layer.c" />
+    <ClCompile Include="..\..\src\BarcodeDemo.cpp" />
     <ClCompile Include="..\..\src\batchnorm_layer.c" />
     <ClCompile Include="..\..\src\blas.c" />
     <ClCompile Include="..\..\src\box.c" />
@@ -238,6 +239,7 @@
     <ClInclude Include="..\..\src\activations.h" />
     <ClInclude Include="..\..\src\activation_layer.h" />
     <ClInclude Include="..\..\src\avgpool_layer.h" />
+    <ClInclude Include="..\..\src\BarcodeDemo.h" />
     <ClInclude Include="..\..\src\batchnorm_layer.h" />
     <ClInclude Include="..\..\src\blas.h" />
     <ClInclude Include="..\..\src\box.h" />

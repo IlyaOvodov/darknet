@@ -191,7 +191,7 @@ void forward_yolo_layer(const layer l, network_state state)
 			index = entry_index(l, b, n*l.w*l.h, kYoloOutputExtraFeaturesIndex);
 			if (l.extra_features_num)
 				activate_array(l.output + index, l.extra_features_num*l.w*l.h, TANH);
-			index = entry_index(l, b, n*l.w*l.h, yolo_output_class_index(l));
+			index = entry_index(l, b, n*l.w*l.h, yolo_output_class_index(&l));
 			activate_array(l.output + index, l.classes*l.w*l.h, LOGISTIC);
         }
     }
