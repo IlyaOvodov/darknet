@@ -1243,6 +1243,14 @@ void calc_anchors(char *datacfg, int num_of_clusters, int width, int height, int
 }
 #endif // OPENCV
 
+
+void barcodes_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, int dont_show)
+{
+	image im = load_image(filename, 0, 0, 3);
+	detect_barcodes(datacfg, cfgfile, weightfile, im, thresh, dont_show, 1 /*save_images*/);
+	free_image(im);
+}
+
 void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh,
 				   float hier_thresh, int dont_show, int ext_output, int save_labels)
 {
@@ -1296,7 +1304,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 		int nboxes = 0;
 		detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
 		//printf("%s: %d boxes.\n", input, nboxes);
-		if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+		if (nms) do_nms_obj(dets, nboxes, l.classes, nms);
 		//printf("%s: %d boxes after nms.\n", input, nboxes);
 
 		for (int idet = 0; idet < nboxes; ++idet) {
@@ -1306,7 +1314,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 						dets[idet].bbox.y*im.h - dets[idet].bbox.h*im.h / 2, dets[idet].bbox.w*im.w, dets[idet].bbox.h*im.h };
 					IplImage* input_image = image_to_ipl(im);
 					IplImage* restored_mat = RestoreImage(input_image, input_roi,
-						dets[idet].extra_features[0], dets[idet].extra_features[1], dets[idet].extra_features[2]);
+						dets[idet].extra_features[0], dets[idet].extra_features[1], dets[idet].extra_features[2], 256./224.);
 					image restored = ipl_to_image(restored_mat);
 					save_image(restored, "predictions_restore");
 					if (!dont_show) {
@@ -1440,7 +1448,8 @@ void run_detector(int argc, char **argv)
     char *filename = (argc > 6) ? argv[6]: 0;
     if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh >= 0 ? thresh : 0.25, hier_thresh, dont_show, ext_output, save_labels);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear, dont_show);
-    else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile, thresh >= 0 ? thresh : .005);
+	else if(0==strcmp(argv[2], "bar")) barcodes_detector(datacfg, cfg, weights, filename, thresh >= 0 ? thresh : 0.1, dont_show);
+	else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile, thresh >= 0 ? thresh : .005);
     else if(0==strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights, thresh, ext_output);
 	else if(0==strcmp(argv[2], "map")) validate_detector_map(datacfg, cfg, weights, thresh >= 0 ? thresh : 0.25);
 	else if(0==strcmp(argv[2], "calc_anchors")) calc_anchors(datacfg, num_of_clusters, width, height, show);

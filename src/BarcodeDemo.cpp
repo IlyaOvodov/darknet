@@ -51,7 +51,7 @@ public:
 		//const std::vector<cv::Rect>& input_rects,
 		//std::vector<cv::Rect>& output_rects,
 		//std::vector<cv::Point>& border_points,
-		double alpha, double beta, double gamma);
+		double alpha, double beta, double gamma, double h2w_ratio);
 
 private:
 	cv::Mat m_2D_to_3D_matrix;
@@ -140,13 +140,13 @@ cv::Mat ImageRotator::RotateImageBack(const cv::Mat &input_image, const cv::Rect
 	//const std::vector<cv::Rect>& input_rects,
 	//std::vector<cv::Rect>& output_rects,
 	//std::vector<cv::Point>& border_points,
-	double alpha, double beta, double gamma)
+	double alpha, double beta, double gamma, double h2w_ratio)
 {
 	int width_margin = Round(input_roi.width * kSizeMargin);
 	int height_margin = Round(input_roi.height * kSizeMargin);
 	cv::Rect ext_input_roi(input_roi.x - width_margin / 2, input_roi.y - height_margin / 2, input_roi.width + width_margin, input_roi.height + height_margin);
 	int original_wh = fabs(gamma) > 0.5 ? ext_input_roi.height : ext_input_roi.width;
-	cv::Size original_size(original_wh, original_wh * 192 / 288);
+	cv::Size original_size(original_wh, Round(original_wh * h2w_ratio));
 	cv::Point original_center(original_size.width / 2, original_size.height / 2);
 
 	cv::Point transformed_center(ext_input_roi.width / 2, ext_input_roi.height / 2);
@@ -196,11 +196,11 @@ cv::Mat ImageRotator::RotateImageBack(const cv::Mat &input_image, const cv::Rect
 }
 
 
-IplImage* RestoreImage(const CvMat* input_image, const CvRect input_roi,
-	double x_ang, double y_ang, double z_ang)
+IplImage* RestoreImage(const IplImage* input_image, const CvRect input_roi,
+	double x_ang, double y_ang, double z_ang, double h2w_ratio)
 {
 	cv::Mat input_image_mat = cv::cvarrToMat(input_image);
-	cv::Mat out_img = image_rotator.RotateImageBack(input_image_mat, input_roi, x_ang, y_ang, z_ang);
+	cv::Mat out_img = image_rotator.RotateImageBack(input_image_mat, input_roi, x_ang, y_ang, z_ang, h2w_ratio);
 	IplImage* res = cvCloneImage(&(IplImage)out_img);
 	return res;
 }

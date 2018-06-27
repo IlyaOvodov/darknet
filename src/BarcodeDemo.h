@@ -8,8 +8,8 @@
 extern "C" {
 #endif
 
-	IplImage* RestoreImage(const CvMat* input_image, const CvRect input_roi,
-		double x_ang, double y_ang, double z_ang);
+	IplImage* RestoreImage(const IplImage* input_image, const CvRect input_roi,
+		double x_ang, double y_ang, double z_ang, double h2w_ratio);
 
 
 #ifdef __cplusplus

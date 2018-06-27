@@ -181,7 +181,8 @@ box_label *read_boxes_with_names(char *filename, int *n, char **names, int extra
 		error("More then 3 extra_features can't be read");
 	if (extra_features_num > EXTRA_FEATURES_NUM)
 		error("More then EXTRA_FEATURES_NUM extra_features can't be read");
-	while (fscanf(file, "%s%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f", &class_name, &x, &y, &w, &h, ang_x, ang_x+1, ang_x+2) == 5 + extra_features_num) {
+	//while (fscanf(file, "%s%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f%99[ \t]%f", &class_name, &x, &y, &w, &h, ang_x, ang_x + 1, ang_x + 2) == 5 + extra_features_num) {
+	while (fscanf(file, "%s %f %f %f %f %f %f %f", &class_name, &x, &y, &w, &h, ang_x, ang_x + 1, ang_x + 2) == 5 + 3 /*extra_features_num*/) {
 		boxes = realloc(boxes, (count + 1) * sizeof(box_label));
 		boxes[count].id = -1;
 		id = 0;
