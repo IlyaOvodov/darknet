@@ -20,6 +20,7 @@
 #include "opencv2/imgproc/imgproc_c.h"
 
 #include "BarcodeDemo.h"
+#include "DetectInscription.h"
 
 #ifndef CV_VERSION_EPOCH
 #include "opencv2/videoio/videoio_c.h"
@@ -318,7 +319,7 @@ void print_custom_detections(FILE *fps, char *id, detection *dets, int total, fl
 
 	int i;
 	for (i = 0; i < selected_detections_num; ++i) {
-		const detection det_i = selected_detections[i].det;
+		const detection det_i = *selected_detections[i].det;
 		const int best_class = selected_detections[i].best_class;
 		if (best_class >= 0) {
 			float xmin = det_i.bbox.x - det_i.bbox.w / 2.;
@@ -1247,8 +1248,14 @@ void calc_anchors(char *datacfg, int num_of_clusters, int width, int height, int
 void barcodes_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, int dont_show)
 {
 	image im = load_image(filename, 0, 0, 3);
-	detect_barcodes(datacfg, cfgfile, weightfile, im, thresh, dont_show, 1 /*save_images*/);
-	free_image(im);
+
+	BarcodesDecoder* bd = CreateBarcodesDecoder(datacfg, cfgfile, weightfile, thresh, dont_show ? 0 : (2 | 4));
+	IplImage* iplim = image_to_ipl(im);
+	DetectBarcodes(bd, im, im, iplim, dont_show ? 0:(2|4), 2|4 /*save_images*/);
+	ReleaseBarcodesDecoder(bd);
+
+	//cvReleaseImage(iplim);
+	//free_image(im);
 }
 
 void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh,
@@ -1467,5 +1474,9 @@ void run_detector(int argc, char **argv)
 		free_list_contents_kvp(options);
 		free_list(options);
     }
+	else if (0 == strcmp(argv[2], "demobar")) {
+		demobar(datacfg, cfg, weights, filename, thresh >= 0 ? thresh : 0.1, cam_index, frame_skip, prefix, out_filename,
+			http_stream_port, dont_show);
+	}
 	else printf(" There isn't such command: %s", argv[2]);
 }
