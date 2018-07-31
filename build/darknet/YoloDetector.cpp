@@ -183,7 +183,7 @@ private:
 };
 
 // \brief Функция создания детектора yolo: объекта класса IYoloDetector
-ErrorCode CreateYoloDetector(const char* config_filepath, const char* weight_filepath, const char *name_list_filepath,
+YOLODLL_API ErrorCode CreateYoloDetector(const char* config_filepath, const char* weight_filepath, const char *name_list_filepath,
 								int gpu_id, const char* const* params, IYoloDetectorOwned*& i_yolo_detector)
 {
 	try
