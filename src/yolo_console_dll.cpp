@@ -241,7 +241,8 @@ int main(int argc, char *argv[])
 
 	float const thresh = (argc > 5) ? std::stof(argv[5]) : 0.20;
 
-	Detector detector(cfg_file, weights_file);
+	int unused_net_classes;
+	Detector detector(cfg_file, weights_file, unused_net_classes);
 
 	auto obj_names = objects_names_from_file(names_file);
 	std::string out_videofile = "result.avi";
@@ -474,7 +475,8 @@ int main(int argc, char *argv[])
 			//std::vector<bbox_t> result_vec = detector.detect(filename);
 
 			auto img = detector.load_image(filename);
-			std::vector<bbox_t> result_vec = detector.detect(img);
+			std::vector<float> unused_copy_probs;
+			std::vector<bbox_t> result_vec = detector.detect(img, unused_copy_probs);
 			detector.free_image(img);
 			show_console_result(result_vec, obj_names);
 #endif			
