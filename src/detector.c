@@ -10,6 +10,7 @@
 #include "box.h"
 #include "demo.h"
 #include "option_list.h"
+#include "image.h"
 
 #ifdef OPENCV
 #include "opencv2/highgui/highgui_c.h"
@@ -17,6 +18,9 @@
 //#include "opencv2/core/core.hpp"
 #include "opencv2/core/version.hpp"
 #include "opencv2/imgproc/imgproc_c.h"
+
+#include "BarcodeDemo.h"
+#include "DetectInscription.h"
 
 #ifndef CV_VERSION_EPOCH
 #include "opencv2/videoio/videoio_c.h"
@@ -35,11 +39,17 @@ void draw_train_loss(IplImage* img, int img_size, float avg_loss, float max_img_
 
 static int coco_ids[] = {1,2,3,4,5,6,7,8,9,10,11,13,14,15,16,17,18,19,20,21,22,23,24,25,27,28,31,32,33,34,35,36,37,38,39,40,41,42,43,44,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,67,70,72,73,74,75,76,77,78,79,80,81,82,84,85,86,87,88,89,90};
 
+char** global_names;
+int global_extra_features_num;
+
 void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear, int dont_show)
 {
     list *options = read_data_cfg(datacfg);
     char *train_images = option_find_str(options, "train", "data/train.list");
     char *backup_directory = option_find_str(options, "backup", "/backup/");
+
+	char *name_list = option_find_str(options, "names", "data/names.list");
+	global_names = get_labels(name_list); // TODO free
 
     srand(time(0));
     char *base = basecfg(cfgfile);
@@ -64,6 +74,8 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     }
     srand(time(0));
     network net = nets[0];
+
+	global_extra_features_num = net.extra_features_num;
 
 	if ((net.batch * net.subdivisions) == 1) {
 		printf("\n Error: You set incorrect value batch=1 for Training! You should set batch=64 subdivision=64 \n");
@@ -307,7 +319,7 @@ void print_custom_detections(FILE *fps, char *id, detection *dets, int total, fl
 
 	int i;
 	for (i = 0; i < selected_detections_num; ++i) {
-		const detection det_i = selected_detections[i].det;
+		const detection det_i = *selected_detections[i].det;
 		const int best_class = selected_detections[i].best_class;
 		if (best_class >= 0) {
 			float xmin = det_i.bbox.x - det_i.bbox.w / 2.;
@@ -526,6 +538,10 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 	list *plist = get_paths(valid_images);
 	char **paths = (char **)list_to_array(plist);
 
+	char *name_list = option_find_str(options, "names", "data/names.list");
+	char **names = get_labels(name_list);
+	image **alphabet = load_alphabet();
+
 	layer l = net.layers[net.n - 1];
 
 	int m = plist->size;
@@ -546,6 +562,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 	float avg_iou_class = 0; // sum of IOU by labels fit with best fitting proposal with correct class
 	float proposals_avg_iou = 0;       // sum of IOU by proposals fit with best fitting label
 	float proposals_avg_iou_class = 0; // sum of IOU by proposals fit with best fitting label with correct class
+	float avg_angle[EXTRA_FEATURES_NUM] = { 0 };
 
 	for (i = 0; i < m; ++i) {
 		char *path = paths[i];
@@ -556,7 +573,10 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 		int nboxes = 0;
 		int letterbox = 0;
 		detection *dets = get_network_boxes(&net, sized.w, sized.h, thresh, .5, 0, 1, &nboxes, letterbox);
+		//printf("%s: %d boxes.\n", path, nboxes);
 		if (nms) do_nms_obj(dets, nboxes, 1, nms);
+		//printf("%s: %d boxes after nms.\n", path, nboxes);
+		//draw_detections_v3(orig, dets, nboxes, thresh, names, alphabet, l.classes, 1);
 		int selected_detections_num;
 		detection_with_class* selected_detections = get_actual_detections(dets, nboxes, -1 /*no threshould*/, &selected_detections_num);
 
@@ -564,7 +584,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 		replace_image_to_label(path, labelpath);
 
 		int num_labels = 0;
-		box_label *truth = read_boxes(labelpath, &num_labels);
+		box_label *truth = read_boxes_with_names(labelpath, &num_labels, names, net.extra_features_num);
 		int k = 0;
 		for (k = 0; k < selected_detections_num; ++k) {
 			const detection* det_k = &(selected_detections[k].det);
@@ -612,6 +632,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 			float best_iou = 0;
 			float best_iou_class = 0;
 			int k = 0;
+			detection* best_detection = 0;
 			for (k = 0; k < selected_detections_num; ++k) {
 				const detection* det_k = &(selected_detections[k].det);
 				int* best_class_k = &(selected_detections[k].best_class);
@@ -621,6 +642,7 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 				}
 				if (det_k->objectness > thresh && iou > best_iou_class && *best_class_k == truth[j].id) {
 					best_iou_class = iou;
+					best_detection = det_k;
 				}
 			}
 			avg_iou += best_iou;
@@ -630,6 +652,9 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 			avg_iou_class += best_iou_class;
 			if (best_iou_class > iou_thresh) {
 				++correct_class;
+				int ef_i;
+				for (ef_i = 0; ef_i < net.extra_features_num; ++ef_i)
+					avg_angle[ef_i] += fabs(truth[j].extra_features[ef_i] - best_detection->extra_features[ef_i]);
 			}
 		}
 
@@ -656,14 +681,16 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
 				"%5.2f %5.2f   %5.2f %5.2f    "
 				"%5.2f %5.2f      "
 				"%5.2f %5.2f           "
-				"%5.2f %5.2f"
-				"\n",
+				"%5.2f %5.2f   ",
 				i, correct, total, (float)proposals / (i + 1),
 				avg_iou * 100 / total, 100.*correct / total, avg_iou_class * 100 / total, 100.*correct_class / total,
 				proposals_avg_iou * 100 / proposals, 100.*proposals_correct / proposals,
 				proposals_avg_iou_class * 100 / proposals, 100.*correct_class / proposals,
-				proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class
-				);
+				proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class);
+				int ef_i;
+				for (ef_i = 0; ef_i < net.extra_features_num; ++ef_i)
+					fprintf(stderr, "%5.2f ", avg_angle[ef_i] * 100 / total);
+				fprintf(stderr, "\n");
 			}
 		}
 		else
@@ -1217,6 +1244,20 @@ void calc_anchors(char *datacfg, int num_of_clusters, int width, int height, int
 }
 #endif // OPENCV
 
+
+void barcodes_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, int dont_show)
+{
+	image im = load_image(filename, 0, 0, 3);
+
+	BarcodesDecoder* bd = CreateBarcodesDecoder(datacfg, cfgfile, weightfile, thresh, dont_show ? 0 : (2 | 4));
+	IplImage* iplim = image_to_ipl(im);
+	DetectBarcodes(bd, im, im, iplim, dont_show ? 0:(2|4), 2|4 /*save_images*/);
+	ReleaseBarcodesDecoder(bd);
+
+	//cvReleaseImage(iplim);
+	//free_image(im);
+}
+
 void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh,
 				   float hier_thresh, int dont_show, int ext_output, int save_labels)
 {
@@ -1269,7 +1310,30 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 		//draw_detections(im, l.w*l.h*l.n, thresh, boxes, probs, names, alphabet, l.classes);
 		int nboxes = 0;
 		detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
-		if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+		//printf("%s: %d boxes.\n", input, nboxes);
+		if (nms) do_nms_obj(dets, nboxes, l.classes, nms);
+		//printf("%s: %d boxes after nms.\n", input, nboxes);
+
+		for (int idet = 0; idet < nboxes; ++idet) {
+			for (int i_cl = 0; i_cl < dets[idet].classes; ++i_cl) {
+				if (dets[idet].prob[i_cl] > thresh && dets[idet].extra_features_num >= 3) {
+					CvRect input_roi = { dets[idet].bbox.x*im.w - dets[idet].bbox.w*im.w / 2,
+						dets[idet].bbox.y*im.h - dets[idet].bbox.h*im.h / 2, dets[idet].bbox.w*im.w, dets[idet].bbox.h*im.h };
+					IplImage* input_image = image_to_ipl(im);
+					IplImage* restored_mat = RestoreImage(input_image, input_roi,
+						dets[idet].extra_features[0], dets[idet].extra_features[1], dets[idet].extra_features[2], 256./224.);
+					image restored = ipl_to_image(restored_mat);
+					save_image(restored, "predictions_restore");
+					if (!dont_show) {
+						show_image(restored, "predictions_restore");
+					}
+					cvReleaseImage(&input_image);
+					cvReleaseImage(&restored_mat);
+					break;
+				}
+			}
+		}
+
 		draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
         save_image(im, "predictions");
 		if (!dont_show) {
@@ -1391,7 +1455,8 @@ void run_detector(int argc, char **argv)
     char *filename = (argc > 6) ? argv[6]: 0;
     if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh >= 0 ? thresh : 0.25, hier_thresh, dont_show, ext_output, save_labels);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear, dont_show);
-    else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile, thresh >= 0 ? thresh : .005);
+	else if(0==strcmp(argv[2], "bar")) barcodes_detector(datacfg, cfg, weights, filename, thresh >= 0 ? thresh : 0.1, dont_show);
+	else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile, thresh >= 0 ? thresh : .005);
     else if(0==strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights, thresh, ext_output);
 	else if(0==strcmp(argv[2], "map")) validate_detector_map(datacfg, cfg, weights, thresh >= 0 ? thresh : 0.25);
 	else if(0==strcmp(argv[2], "calc_anchors")) calc_anchors(datacfg, num_of_clusters, width, height, show);
@@ -1409,5 +1474,9 @@ void run_detector(int argc, char **argv)
 		free_list_contents_kvp(options);
 		free_list(options);
     }
+	else if (0 == strcmp(argv[2], "demobar")) {
+		demobar(datacfg, cfg, weights, filename, thresh >= 0 ? thresh : 0.1, cam_index, frame_skip, prefix, out_filename,
+			http_stream_port, dont_show);
+	}
 	else printf(" There isn't such command: %s", argv[2]);
 }

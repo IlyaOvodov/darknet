@@ -573,6 +573,7 @@ detection *make_network_boxes(network *net, float thresh, int *num)
 		if (l.coords > 4) {
 			dets[i].mask = calloc(l.coords - 4, sizeof(float));
 		}
+		dets[i].extra_features_num = net->extra_features_num;
 	}
 	return dets;
 }

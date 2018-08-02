@@ -249,7 +249,7 @@ detection_with_class* get_actual_detections(detection *dets, int dets_num, float
 			}
 		}
 		if (best_class >= 0) {
-			result_arr[selected_num].det = dets[i];
+			result_arr[selected_num].det = &dets[i];
 			result_arr[selected_num].best_class = best_class;
 			++selected_num;
 		}
@@ -263,7 +263,7 @@ detection_with_class* get_actual_detections(detection *dets, int dets_num, float
 int compare_by_lefts(const void *a_ptr, const void *b_ptr) {
 	const detection_with_class* a = (detection_with_class*)a_ptr;
 	const detection_with_class* b = (detection_with_class*)b_ptr;
-	const float delta = (a->det.bbox.x - a->det.bbox.w/2) - (b->det.bbox.x - b->det.bbox.w/2);
+	const float delta = (a->det->bbox.x - a->det->bbox.w/2) - (b->det->bbox.x - b->det->bbox.w/2);
 	return delta < 0 ? -1 : delta > 0 ? 1 : 0;
 }
 
@@ -271,7 +271,7 @@ int compare_by_lefts(const void *a_ptr, const void *b_ptr) {
 int compare_by_probs(const void *a_ptr, const void *b_ptr) {
 	const detection_with_class* a = (detection_with_class*)a_ptr;
 	const detection_with_class* b = (detection_with_class*)b_ptr;
-	float delta = a->det.prob[a->best_class] - b->det.prob[b->best_class];
+	float delta = a->det->prob[a->best_class] - b->det->prob[b->best_class];
 	return delta < 0 ? -1 : delta > 0 ? 1 : 0;
 }
 
@@ -285,18 +285,28 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 	int i;
 	for (i = 0; i < selected_detections_num; ++i) {
 		const int best_class = selected_detections[i].best_class;
-		printf("%s: %.0f%%", names[best_class],	selected_detections[i].det.prob[best_class] * 100);
-		if (ext_output)
-			printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)\n",
-				(selected_detections[i].det.bbox.x - selected_detections[i].det.bbox.w / 2)*im.w,
-				(selected_detections[i].det.bbox.y - selected_detections[i].det.bbox.h / 2)*im.h,
-				selected_detections[i].det.bbox.w*im.w, selected_detections[i].det.bbox.h*im.h);
-		else
+		printf("%s: %.0f%%", names[best_class],	selected_detections[i].det->prob[best_class] * 100);
+		if (ext_output) {
+			printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)",
+				(selected_detections[i].det->bbox.x - selected_detections[i].det->bbox.w / 2)*im.w,
+				(selected_detections[i].det->bbox.y - selected_detections[i].det->bbox.h / 2)*im.h,
+				selected_detections[i].det->bbox.w*im.w, selected_detections[i].det->bbox.h*im.h
+			);
+			int ef_i;
+			for (ef_i = 0; ef_i < selected_detections[i].det->extra_features_num; ++ef_i) {
+				if (ef_i == 0)
+					printf("  angl: ");
+				printf("%4.2f ", selected_detections[i].det->extra_features[ef_i]);
+			}
+			printf(")\n");
+		}
+		else {
 			printf("\n");
+		}
 		int j;
 		for (j = 0; j < classes; ++j) {
-			if (selected_detections[i].det.prob[j] > thresh && j != best_class) {
-				printf("%s: %.0f%%\n", names[j], selected_detections[i].det.prob[j] * 100);
+			if (selected_detections[i].det->prob[j] > thresh && j != best_class) {
+				printf("%s: %.0f%%\n", names[j], selected_detections[i].det->prob[j] * 100);
 			}
 		}
 	}
@@ -327,7 +337,7 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 			rgb[0] = red;
 			rgb[1] = green;
 			rgb[2] = blue;
-			box b = selected_detections[i].det.bbox;
+			box b = selected_detections[i].det->bbox;
 			//printf("%f %f %f %f\n", b.x, b.y, b.w, b.h);
 
 			int left = (b.x - b.w / 2.)*im.w;
@@ -347,12 +357,48 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 			//sprintf(labelstr, "%d x %d - w: %d, h: %d", b_x_center, b_y_center, b_width, b_height);
 
 			draw_box_width(im, left, top, right, bot, width, red, green, blue);
+
+			if (selected_detections[i].det->extra_features_num >= 3) {
+				// draw direction vector
+				float ang = selected_detections[i].det->extra_features[2] * CV_PI / 2; // z angle
+				float tan_ang = tan(ang);
+				float x0 = b.x*im.w;
+				float y0 = b.y*im.h;
+				if (fabs(tan_ang) < 1)
+				{
+					int dx = 0;
+					for (dx = 0; dx <= b.w*im.w / 2; ++dx) {
+						int x = x0 + dx;
+						int y = y0 + dx*tan_ang;
+						if (x > 0 && y > 0 && x < im.w && y < im.h) {
+							im.data[x + y*im.w + 0 * im.w*im.h] = red;
+							im.data[x + y*im.w + 1 * im.w*im.h] = green;
+							im.data[x + y*im.w + 2 * im.w*im.h] = blue;
+						}
+					}
+				}
+				else
+				{
+					int dy = 0;
+					for (dy = 0; dy <= b.h*im.h / 2; ++dy) {
+						int y = y0 + dy;
+						int x = x0 + dy / tan_ang;
+						if (x > 0 && y > 0 && x < im.w && y < im.h) {
+							im.data[x + y*im.w + 0 * im.w*im.h] = red;
+							im.data[x + y*im.w + 1 * im.w*im.h] = green;
+							im.data[x + y*im.w + 2 * im.w*im.h] = blue;
+						}
+					}
+				}
+			}
+
+
 			if (alphabet) {
 				char labelstr[4096] = { 0 };
 				strcat(labelstr, names[selected_detections[i].best_class]);
 				int j;
 				for (j = 0; j < classes; ++j) {
-					if (selected_detections[i].det.prob[j] > thresh && j != selected_detections[i].best_class) {
+					if (selected_detections[i].det->prob[j] > thresh && j != selected_detections[i].best_class) {
 						strcat(labelstr, ", ");
 						strcat(labelstr, names[j]);
 					}
@@ -361,8 +407,8 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 				draw_label(im, top + width, left, label, rgb);
 				free_image(label);
 			}
-			if (selected_detections[i].det.mask) {
-				image mask = float_to_image(14, 14, 1, selected_detections[i].det.mask);
+			if (selected_detections[i].det->mask) {
+				image mask = float_to_image(14, 14, 1, selected_detections[i].det->mask);
 				image resized_mask = resize_image(mask, b.w*im.w, b.h*im.h);
 				image tmask = threshold_image(resized_mask, .5);
 				embed_image(tmask, im, left, top);
@@ -539,13 +585,13 @@ void draw_detections_cv_v3(IplImage* show_img, detection *dets, int num, float t
 					(float)left, (float)top, b.w*show_img->width, b.h*show_img->height);
 			else
 				printf("\n");
-			cvRectangle(show_img, pt_text_bg1, pt_text_bg2, color, width, 8, 0);
-			cvRectangle(show_img, pt_text_bg1, pt_text_bg2, color, CV_FILLED, 8, 0);	// filled
+			//cvRectangle(show_img, pt_text_bg1, pt_text_bg2, color, width, 8, 0);
+			//cvRectangle(show_img, pt_text_bg1, pt_text_bg2, color, CV_FILLED, 8, 0);	// filled
 			CvScalar black_color;
 			black_color.val[0] = 0;
 			CvFont font;
 			cvInitFont(&font, CV_FONT_HERSHEY_SIMPLEX, font_size, font_size, 0, font_size * 3, 8);
-			cvPutText(show_img, labelstr, pt_text, &font, black_color);
+			//cvPutText(show_img, labelstr, pt_text, &font, black_color);
 		}
 	}
 }
@@ -953,6 +999,26 @@ image ipl_to_image(IplImage* src)
     return out;
 }
 
+IplImage* image_to_ipl(image src)
+{
+	IplImage* out = cvCreateImage(cvSize(src.w, src.h), IPL_DEPTH_8U,  src.c);
+	unsigned char *data = (unsigned char *)out->imageData;
+	int h = out->height;
+	int w = out->width;
+	int c = out->nChannels;
+	int step = out->widthStep;
+	int i, j, k, count = 0;
+
+	for (k = 0; k < c; ++k) {
+		for (i = 0; i < h; ++i) {
+			for (j = 0; j < w; ++j) {
+				data[i*step + j*c + k] = src.data[count++] * 255.;
+			}
+		}
+	}
+	return out;
+}
+
 image load_image_cv(char *filename, int channels)
 {
     IplImage* src = 0;
@@ -1038,6 +1104,10 @@ image get_image_from_stream_resize(CvCapture *cap, int w, int h, int c, IplImage
 		if (dont_close) src = cvCreateImage(cvSize(416, 416), IPL_DEPTH_8U, c);
 		else return make_empty_image(0, 0, 0);
 	}
+	if (w == 0)
+		w = src->width;
+	if (h == 0)
+		h = src->height;
 	IplImage* new_img = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, c);
 	*in_img = cvCreateImage(cvSize(src->width, src->height), IPL_DEPTH_8U, c);
 	cvResize(src, *in_img, CV_INTER_LINEAR);

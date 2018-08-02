@@ -260,7 +260,7 @@ int *parse_yolo_mask(char *a, int *num)
 	return mask;
 }
 
-layer parse_yolo(list *options, size_params params)
+layer parse_yolo(list *options, size_params params, int extra_features_num)
 {
 	int classes = option_find_int(options, "classes", 20);
 	int total = option_find_int(options, "num", 1);
@@ -269,7 +269,7 @@ layer parse_yolo(list *options, size_params params)
 	char *a = option_find_str(options, "mask", 0);
 	int *mask = parse_yolo_mask(a, &num);
 	int max_boxes = option_find_int_quiet(options, "max", 90);
-	layer l = make_yolo_layer(params.batch, params.w, params.h, num, total, mask, classes, max_boxes);
+	layer l = make_yolo_layer(params.batch, params.w, params.h, num, total, mask, classes, max_boxes, extra_features_num);
 	if (l.outputs != params.inputs) {
 		printf("Error: l.outputs == params.inputs \n");
 		printf("filters= in the [convolutional]-layer doesn't correspond to classes= or mask= in [yolo]-layer \n");
@@ -642,6 +642,8 @@ void parse_net_options(list *options, network *net)
     net->hue = option_find_float_quiet(options, "hue", 0);
 	net->power = option_find_float_quiet(options, "power", 4);
 
+	net->extra_features_num = option_find_float_quiet(options, "extra_features_num", 0);
+
     if(!net->inputs && !(net->h && net->w && net->c)) error("No input parameters supplied");
 
     char *policy_s = option_find_str(options, "policy", "constant");
@@ -756,7 +758,7 @@ network parse_network_cfg_custom(char *filename, int batch)
         }else if(lt == REGION){
             l = parse_region(options, params);
 		}else if (lt == YOLO) {
-			l = parse_yolo(options, params);
+			l = parse_yolo(options, params, net.extra_features_num);
         }else if(lt == DETECTION){
             l = parse_detection(options, params);
         }else if(lt == SOFTMAX){

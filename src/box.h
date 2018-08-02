@@ -15,6 +15,8 @@
 #endif
 #endif
 
+#define EXTRA_FEATURES_NUM 3 // Number of features other then coords and class
+
 typedef struct{
     float x, y, w, h;
 } box;
@@ -31,10 +33,12 @@ typedef struct detection {
 	float *mask;
 	float objectness;
 	int sort_class;
+	float extra_features[EXTRA_FEATURES_NUM];
+	int extra_features_num;
 } detection;
 
 typedef struct detection_with_class {
-	detection det;
+	detection* det;
 	// The most probable class id: the best class index in this->prob.
 	// Is filled temporary when processing results, otherwise not initialized
 	int best_class;

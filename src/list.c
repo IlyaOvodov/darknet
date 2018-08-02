@@ -93,12 +93,13 @@ void free_list_contents_kvp(list *l)
 
 void **list_to_array(list *l)
 {
-    void **a = calloc(l->size, sizeof(void*));
+    void **a = calloc(l->size+1, sizeof(void*));
     int count = 0;
     node *n = l->front;
     while(n){
         a[count++] = n->val;
         n = n->next;
     }
-    return a;
+	a[count] = 0;
+	return a;
 }

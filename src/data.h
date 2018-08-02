@@ -73,7 +73,24 @@ typedef struct{
     int id;
     float x,y,w,h;
     float left, right, top, bottom;
+	float extra_features[EXTRA_FEATURES_NUM];
+	int extra_features_num;
 } box_label;
+
+typedef struct {
+	box bbox;
+	float id;
+	float extra_features[EXTRA_FEATURES_NUM];
+	int extra_features_num;
+} truth_record;
+
+static const int kTruthRecordSz = sizeof(truth_record) / sizeof(float); // Were 5, now 9
+
+// Structure of YOLO layer output: 
+// x,y,w,h, objectness, extra_features[EXTRA_FEATURES_NUM], classes_prob[classes number]
+static const int kYoloOutputBoxIndex = 0;
+static const int kYoloOutputObjectnessIndex = 4;
+static const int kYoloOutputExtraFeaturesIndex = 5;
 
 void free_data(data d);
 
@@ -93,6 +110,7 @@ data load_data_augment(char **paths, int n, int m, char **labels, int k, tree *h
 data load_go(char *filename);
 
 box_label *read_boxes(char *filename, int *n);
+box_label *read_boxes_with_names(char *filename, int *n, char **names, int extra_features_num);
 data load_cifar10_data(char *filename);
 data load_all_cifar10();
 

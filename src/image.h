@@ -8,6 +8,10 @@
 #include <math.h>
 #include "box.h"
 
+#ifdef OPENCV
+#include "opencv2/core/core_c.h"
+#endif // OPENCV
+
 typedef struct {
 	int w;
 	int h;
@@ -24,6 +28,7 @@ void draw_label(image a, int r, int c, image label, const float *rgb);
 void write_label(image a, int r, int c, image *characters, char *string, float *rgb);
 void draw_detections(image im, int num, float thresh, box *boxes, float **probs, char **names, image **labels, int classes);
 void draw_detections_v3(image im, detection *dets, int num, float thresh, char **names, image **alphabet, int classes, int ext_output);
+void draw_detections_cv_v3(IplImage* show_img, detection *dets, int num, float thresh, char **names, image **alphabet, int classes, int ext_output);
 image image_distance(image a, image b);
 void scale_image(image m, float s);
 image crop_image(image im, int dx, int dy, int w, int h);
@@ -87,5 +92,11 @@ image get_image_layer(image m, int l);
 
 YOLODLL_API void free_image(image m);
 void test_resize(char *filename);
+
+#ifdef OPENCV
+image ipl_to_image(IplImage* src);
+IplImage* image_to_ipl(image src);
+#endif // OPENCV
+
 #endif
 
