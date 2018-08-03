@@ -201,7 +201,8 @@ IplImage* RestoreImage(const IplImage* input_image, const CvRect input_roi,
 {
 	cv::Mat input_image_mat = cv::cvarrToMat(input_image);
 	cv::Mat out_img = image_rotator.RotateImageBack(input_image_mat, input_roi, x_ang, y_ang, z_ang, h2w_ratio);
-	IplImage* res = cvCloneImage(&(IplImage)out_img);
+	IplImage out_ptr = (IplImage)out_img;
+	IplImage* res = cvCloneImage(&out_ptr);
 	return res;
 }
 
