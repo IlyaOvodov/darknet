@@ -503,11 +503,11 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 	if (!prefix && !dont_show) {
 		cvNamedWindow("Demo", CV_WINDOW_NORMAL);
 		cvMoveWindow("Demo", 0, 0);
-		cvResizeWindow("Demo", 800, 600);
+		cvResizeWindow("Demo", 600, 400);
 
 		cvNamedWindow("Demo2", CV_WINDOW_NORMAL);
 		cvMoveWindow("Demo2", 100, 100);
-		cvResizeWindow("Demo2", 800, 600);
+		cvResizeWindow("Demo2", 600, 400);
 	}
 
 	CvVideoWriter* output_video_writer = NULL;    // cv::VideoWriter output_video;

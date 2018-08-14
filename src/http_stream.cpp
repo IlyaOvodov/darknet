@@ -55,6 +55,24 @@ using namespace cv;
 #include "http_stream.h"
 #include "image.h"
 
+extern "C" {
+#ifdef WIN32
+#include <time.h>
+#include <winsock.h>
+#include "gettimeofday.h"
+#else
+#include <sys/time.h>
+#endif
+}
+
+double get_wall_time()
+{
+	struct timeval time;
+	if (gettimeofday(&time, NULL)) {
+		return 0;
+	}
+	return (double)time.tv_sec + (double)time.tv_usec * .000001;
+}
 
 class MJPGWriter
 {
@@ -235,7 +253,15 @@ IplImage* get_webcam_frame(CvCapture *cap) {
 		cv::Mat frame;
 		if (cpp_cap.isOpened()) 
 		{
-			cpp_cap >> frame;
+			while (1) {
+				double time_start = get_wall_time();
+				cpp_cap.grab();
+				//if ((get_wall_time() - time_start) * cpp_cap.get(CV_CAP_PROP_FPS) > 0.5) {
+				if ((get_wall_time() - time_start) > 0.005) {
+					break;
+				}
+			}
+			cpp_cap.retrieve(frame);
 			if (!frame.data)
 				return src;
 			IplImage tmp = frame;
