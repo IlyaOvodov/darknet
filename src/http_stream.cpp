@@ -236,6 +236,8 @@ IplImage* get_webcam_frame(CvCapture *cap) {
 		if (cpp_cap.isOpened()) 
 		{
 			cpp_cap >> frame;
+			if (!frame.data)
+				return src;
 			IplImage tmp = frame;
 			src = cvCloneImage(&tmp);
 		}

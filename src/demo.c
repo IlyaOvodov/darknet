@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include "network.h"
 #include "detection_layer.h"
 #include "region_layer.h"
@@ -39,6 +40,7 @@ static float **probs;
 static box *boxes;
 static network net;
 static image in_s ;
+pthread_mutex_t in_s_mutex;
 static image det_s;
 static CvCapture * cap;
 static int cpp_video_capture = 0;
@@ -63,21 +65,66 @@ IplImage* det_img;
 IplImage* show_img;
 
 static int flag_exit;
+static double read_time;
+
+double get_wall_time()
+{
+	struct timeval time;
+	if (gettimeofday(&time, NULL)) {
+		return 0;
+	}
+	return (double)time.tv_sec + (double)time.tv_usec * .000001;
+}
 
 void *fetch_in_thread(void *ptr)
 {
     //in = get_image_from_stream(cap);
-	int dont_close_stream = 0;	// set 1 if your IP-camera periodically turns off and turns on video-stream
+	int dont_close_stream = 1;	// set 1 if your IP-camera periodically turns off and turns on video-stream
 	in_s = get_image_from_stream_resize(cap, net.w, net.h, net.c, &in_img, cpp_video_capture, dont_close_stream);
-    if(!in_s.data){
+	pthread_mutex_lock(&in_s_mutex);
+	if (!in_s.data) {
         //error("Stream closed.");
 		printf("Stream closed.\n");
 		flag_exit = 1;
 		return EXIT_FAILURE;
     }
     //in_s = resize_image(in, net.w, net.h);
-	
+	pthread_mutex_unlock(&in_s_mutex);
+
     return 0;
+}
+
+void *fetch_in_thread_continuous(void *ptr)
+{
+	//in = get_image_from_stream(cap);
+	int dont_close_stream = 1;	// set 1 if your IP-camera periodically turns off and turns on video-stream
+	while (1) {
+		image in_s_tmp;
+		IplImage* in_img_tmp;
+		double t1 = get_wall_time();
+		in_s_tmp = get_image_from_stream_resize(cap, net.w, net.h, net.c, &in_img_tmp, cpp_video_capture, dont_close_stream);
+		//if (!in_s_tmp.data) {
+		//	//error("Stream closed.");
+		//	printf("Stream closed.\n");
+		//	flag_exit = 1;
+		//	return EXIT_FAILURE;
+		//}
+		pthread_mutex_lock(&in_s_mutex);
+		if (in_s_tmp.data) {
+			if (in_s.data){
+				free_image(in_s); // drop it, because previous on is not processed yet
+				cvReleaseImage(&in_img);
+			}
+			// last image taken
+			in_s = in_s_tmp;
+			in_img = in_img_tmp;
+			//in_s = resize_image(in, net.w, net.h);
+			double t2 = get_wall_time();
+			read_time = t2 - t1;
+		}
+		pthread_mutex_unlock(&in_s_mutex);
+	}
+	return 0;
 }
 
 void *detect_in_thread(void *ptr)
@@ -132,40 +179,39 @@ void *detect_in_thread(void *ptr)
 
 void *detect_in_thread_bar(void *ptr)
 {
+	if (!det_s.data)
+		return;
+
 	ipl_images[demo_index] = det_img;
 	IplImage* det_img_to_draw = ipl_images[(demo_index + FRAMES / 2 + 1) % FRAMES];
 	demo_index = (demo_index + 1) % FRAMES;
 
 	if (det_img_to_draw) {
-		image det_img_im = ipl_to_image(det_img);
-		if (det_img_im.c > 1)
-			rgbgr_image(det_img_im);
+		//image det_img_im = ipl_to_image(det_img);
+		//if (det_img_im.c > 1)
+		//	rgbgr_image(det_img_im);
 
-		DetectBarcodes(bd, det_s, det_img_im, det_img_to_draw, 0 /*show_images*/, 0 /*save_images*/);
+		//DetectBarcodes(bd, det_s, det_img_im, det_img_to_draw, 0 /*show_images*/, 0 /*save_images*/);
 
-		free_image(det_img_im);
+		//free_image(det_img_im);
 	}
 
 	printf("\033[2J");
 	printf("\033[1;1H");
 	printf("\nFPS:%.1f\n", fps);
+	pthread_mutex_lock(&in_s_mutex);
+	double read_time2 = read_time;
+	pthread_mutex_unlock(&in_s_mutex);
+	printf("\nt: %.4f\n", read_time2);
 	printf("Objects:\n\n");
 
 	det_img = det_img_to_draw;
 
 	free_image(det_s);
+	det_s.data = 0;
 	return 0;
 }
 
-
-double get_wall_time()
-{
-    struct timeval time;
-    if (gettimeofday(&time,NULL)){
-        return 0;
-    }
-    return (double)time.tv_sec + (double)time.tv_usec * .000001;
-}
 
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes,
 	int frame_skip, char *prefix, char *out_filename, int http_stream_port, int dont_show, int ext_output)
@@ -393,7 +439,8 @@ void barcodes_detector123(char *datacfg, char *cfgfile, char *weightfile, char *
 void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filename, float thresh, int cam_index,
 	int frame_skip, char *prefix, char *out_filename, int http_stream_port, int dont_show)
 {
-	bd = CreateBarcodesDecoder(datacfg, cfgfile, weightfile, thresh, 1 /*demo_images*/);
+	pthread_mutex_init(&in_s_mutex, NULL);
+	//GVNC bd = CreateBarcodesDecoder(datacfg, cfgfile, weightfile, thresh, 1 /*demo_images*/);
 
 	int delay = frame_skip;
 
@@ -456,7 +503,11 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 	if (!prefix && !dont_show) {
 		cvNamedWindow("Demo", CV_WINDOW_NORMAL);
 		cvMoveWindow("Demo", 0, 0);
-		cvResizeWindow("Demo", 1352, 1013);
+		cvResizeWindow("Demo", 800, 600);
+
+		cvNamedWindow("Demo2", CV_WINDOW_NORMAL);
+		cvMoveWindow("Demo2", 100, 100);
+		cvResizeWindow("Demo2", 800, 600);
 	}
 
 	CvVideoWriter* output_video_writer = NULL;    // cv::VideoWriter output_video;
@@ -477,15 +528,24 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 
 	double before = get_wall_time();
 
+	const int read_in_thread = 1;
+	const int continuous_read = 1;
+	if (read_in_thread && continuous_read) {
+		in_s.data = 0; // to enable continuous read
+		in_img = 0;
+		if (pthread_create(&fetch_thread, 0, fetch_in_thread_continuous, 0)) error("Thread creation failed");
+	}
 	while (1) {
 		++count;
-		if (1) {
-			if (pthread_create(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed");
+		if (read_in_thread) {
+			if (!continuous_read)
+				if (pthread_create(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed");
 			if (pthread_create(&detect_thread, 0, detect_in_thread_bar, 0)) error("Thread creation failed");
 
 			if (!prefix) {
 				if (!dont_show) {
-					show_image_cv_ipl(show_img, "Demo");
+					if (show_img)
+						show_image_cv_ipl(show_img, "Demo");
 					int c = cvWaitKey(1);
 					if (c == 10) {
 						if (frame_skip == 0) frame_skip = 60;
@@ -498,7 +558,8 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 			else {
 				char buff[256];
 				sprintf(buff, "%s_%08d.jpg", prefix, count);
-				cvSaveImage(buff, show_img, 0);
+				if (show_img)
+					cvSaveImage(buff, show_img, 0);
 				//save_image(disp, buff);
 			}
 
@@ -517,18 +578,31 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 				printf("\n cvWriteFrame \n");
 			}
 
-			cvReleaseImage(&show_img);
+			if (show_img) {
+				cvReleaseImage(&show_img);
+				show_img = 0;
+			}
 
-			pthread_join(fetch_thread, 0);
+			if(!continuous_read)
+				pthread_join(fetch_thread, 0);
 			pthread_join(detect_thread, 0);
 
 			if (flag_exit == 1) break;
 
-			if (delay == 0) {
+			if (delay == 0 && det_img) {
 				show_img = det_img;
+				det_img = 0;
 			}
-			det_img = in_img;
-			det_s = in_s;
+			pthread_mutex_lock(&in_s_mutex);
+			if (in_s.data) { // successfully read
+				det_img = in_img;
+				det_s = in_s;
+				in_s.data = 0;
+				in_img = 0;
+				if (!dont_show)
+					show_image_cv_ipl(det_img, "Demo2");
+			}
+			pthread_mutex_unlock(&in_s_mutex);
 		}
 		else {
 			fetch_in_thread(0);
@@ -560,6 +634,7 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 	}
 
 	// free memory
+	pthread_mutex_destroy(&in_s_mutex);
 	cvReleaseImage(&show_img);
 	cvReleaseImage(&in_img);
 	free_image(in_s);
