@@ -187,13 +187,13 @@ void *detect_in_thread_bar(void *ptr)
 	demo_index = (demo_index + 1) % FRAMES;
 
 	if (det_img_to_draw) {
-		//image det_img_im = ipl_to_image(det_img);
-		//if (det_img_im.c > 1)
-		//	rgbgr_image(det_img_im);
+		image det_img_im = ipl_to_image(det_img);
+		if (det_img_im.c > 1)
+			rgbgr_image(det_img_im);
 
-		//DetectBarcodes(bd, det_s, det_img_im, det_img_to_draw, 0 /*show_images*/, 0 /*save_images*/);
+		DetectBarcodes(bd, det_s, det_img_im, det_img_to_draw, 0 /*show_images*/, 0 /*save_images*/);
 
-		//free_image(det_img_im);
+		free_image(det_img_im);
 	}
 
 	printf("\033[2J");
@@ -440,7 +440,7 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 	int frame_skip, char *prefix, char *out_filename, int http_stream_port, int dont_show)
 {
 	pthread_mutex_init(&in_s_mutex, NULL);
-	//GVNC bd = CreateBarcodesDecoder(datacfg, cfgfile, weightfile, thresh, 1 /*demo_images*/);
+	bd = CreateBarcodesDecoder(datacfg, cfgfile, weightfile, thresh, 1 /*demo_images*/);
 
 	int delay = frame_skip;
 
