@@ -503,11 +503,11 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 	if (!prefix && !dont_show) {
 		cvNamedWindow("Demo", CV_WINDOW_NORMAL);
 		cvMoveWindow("Demo", 0, 0);
-		cvResizeWindow("Demo", 600, 400);
+		cvResizeWindow("Demo", 1920/3, 1080/3);
 
 		cvNamedWindow("Demo2", CV_WINDOW_NORMAL);
 		cvMoveWindow("Demo2", 100, 100);
-		cvResizeWindow("Demo2", 600, 400);
+		cvResizeWindow("Demo2", 1920 / 4, 1080 / 4);
 	}
 
 	CvVideoWriter* output_video_writer = NULL;    // cv::VideoWriter output_video;
@@ -529,7 +529,8 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 	double before = get_wall_time();
 
 	const int read_in_thread = 1;
-	const int continuous_read = 1;
+	int continuous_read = 1;
+	continuous_read = continuous_read && (!filename || strchr(filename, ':')); // only for webcam or stream input
 	if (read_in_thread && continuous_read) {
 		in_s.data = 0; // to enable continuous read
 		in_img = 0;

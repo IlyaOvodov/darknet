@@ -427,6 +427,8 @@ void BarcodesDecoder::ToFile(std::fstream& f, const detection_with_class& d, int
 
 void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im_demo)
 {
+	const int ext_output = -1;
+
 	const float nms1 = 0.1f;
 	const float nms2 = 0.2f;
 	int letterbox = 0;
@@ -492,7 +494,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 			b.h *= net2_.h;
 		}
 		if (demo_images_ & 2)
-			draw_detections_v3(sized1_, dets1, nboxes1, thresh1_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, 1);
+			draw_detections_v3(sized1_, dets1, nboxes1, thresh1_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, ext_output);
 
 		DetectionResult res = FindGroupsByRansac(selected_detections1, selected_detections_num1, names_);
 
@@ -535,7 +537,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 				if (res.is_good)
 					PrintResults(res, selected_detections2, names_);
 			if (demo_images_ & (4 | 1))
-				draw_detections_v3(sized2_, dets2, nboxes2, thresh_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, 1);
+				draw_detections_v3(sized2_, dets2, nboxes2, thresh_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, ext_output);
 
 			// ≈сли распознали плохо, вытаскаиваем из сохраненных результатов, если хорошо - сохран€ем
 			if (CheckResultValidity(res))
@@ -606,7 +608,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 
 		for (auto& res: saved_results_)
 			DrawDetections(im_demo, res.second, res_index++);
-		draw_detections_cv_v3(im_demo, dets, nboxes, thresh_, names_, alphabet_, net1_.layers[net1_.n - 1].classes, 1 /*ext_output*/);
+		draw_detections_cv_v3(im_demo, dets, nboxes, thresh_, names_, alphabet_, net1_.layers[net1_.n - 1].classes, ext_output);
 	}
 
 	free(sdets);
