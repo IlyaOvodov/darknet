@@ -29,6 +29,8 @@
 #include "opencv2/videoio/videoio_c.h"
 #endif
 #include "http_stream.h"
+#include "ThreadCapture.h"
+
 image get_image_from_stream(CvCapture *cap);
 
 
@@ -94,21 +96,42 @@ void *fetch_in_thread(void *ptr)
     return 0;
 }
 
+
+image get_image_from_stream_continuous(void* context, int w, int h, int c, IplImage** in_img)
+{
+	c = c ? c : 3;
+	IplImage* got_img = GetImage(context);
+	if (!got_img) {
+		return make_empty_image(0, 0, 0);
+	}
+	if (got_img->width < 1 || got_img->height < 1 || got_img->nChannels < 1) {
+		cvReleaseImage(&got_img);
+		return make_empty_image(0, 0, 0);
+	}
+	if (w == 0)
+		w = got_img->width;
+	if (h == 0)
+		h = got_img->height;
+	IplImage* new_img = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, c);
+	*in_img = cvCreateImage(cvSize(got_img->width, got_img->height), IPL_DEPTH_8U, c);
+	cvResize(got_img, *in_img, CV_INTER_LINEAR);
+	cvResize(got_img, new_img, CV_INTER_LINEAR);
+	image im = ipl_to_image(new_img);
+	cvReleaseImage(&new_img);
+	cvReleaseImage(&got_img);
+	if (c>1)
+		rgbgr_image(im);
+	return im;
+}
+
+
 void *fetch_in_thread_continuous(void *ptr)
 {
-	//in = get_image_from_stream(cap);
-	int dont_close_stream = 1;	// set 1 if your IP-camera periodically turns off and turns on video-stream
 	while (1) {
 		image in_s_tmp;
 		IplImage* in_img_tmp;
 		double t1 = get_wall_time();
-		in_s_tmp = get_image_from_stream_resize(cap, net.w, net.h, net.c, &in_img_tmp, cpp_video_capture, dont_close_stream);
-		//if (!in_s_tmp.data) {
-		//	//error("Stream closed.");
-		//	printf("Stream closed.\n");
-		//	flag_exit = 1;
-		//	return EXIT_FAILURE;
-		//}
+		in_s_tmp = get_image_from_stream_continuous(ptr, net.w, net.h, net.c, &in_img_tmp);
 		pthread_mutex_lock(&in_s_mutex);
 		if (in_s_tmp.data) {
 			if (in_s.data){
@@ -531,10 +554,13 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 	const int read_in_thread = 1;
 	int continuous_read = 1;
 	continuous_read = continuous_read && (!filename || strchr(filename, ':')); // only for webcam or stream input
+	void* context = 0;
 	if (read_in_thread && continuous_read) {
 		in_s.data = 0; // to enable continuous read
 		in_img = 0;
-		if (pthread_create(&fetch_thread, 0, fetch_in_thread_continuous, 0)) error("Thread creation failed");
+		context = CreateTreadCaptureContext(cap);
+		if (pthread_create(&fetch_thread, 0, fetch_in_thread_continuous, context))
+			error("Thread creation failed");
 	}
 	while (1) {
 		++count;
@@ -588,7 +614,8 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 				pthread_join(fetch_thread, 0);
 			pthread_join(detect_thread, 0);
 
-			if (flag_exit == 1) break;
+			if (flag_exit == 1)
+				break;
 
 			if (delay == 0 && det_img) {
 				show_img = det_img;
