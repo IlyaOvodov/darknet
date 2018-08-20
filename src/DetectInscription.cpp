@@ -360,13 +360,13 @@ void DrawDetections(IplImage* im_demo, const DetectionResult& res, int res_index
 	for (int i=0; i<3; ++i)
 	{
 		int left = Round(im_demo->width * .005);
-		int right = Round(im_demo->width * .155);
 		//int width = im_demo->height * .006;
 		int font_size = Round(im_demo->height * .001f);
 		int rect_h = Round(10 + 25 * font_size);
 		int base_y = Round(im_demo->width * .005 + rect_h + rect_h * (4*res_index + i));//im_demo->height * .001;
+		int right = left + Round(10 + 25 * font_size * 11);
 
-		CvScalar color = cvScalar(224, 224, 224, 0);
+		CvScalar color = cvScalar(196, 255, 255, 0);
 
 		CvPoint pt_text, pt_text_bg1, pt_text_bg2;
 		pt_text.x = left;
@@ -445,6 +445,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 	int selected_detections_num;
 	detection_with_class* sdets = get_actual_detections(dets, nboxes, thresh_, &selected_detections_num);
 
+	//  Удаляем то, что не имеет соответствия на текущем кадре
 	for (auto it = saved_results_.begin(); it != saved_results_.end(); )
 	{
 		it->second.det_ptr = 0;
@@ -463,6 +464,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 			it = saved_results_.erase(it);
 	}
 
+	// Цикл по результатам детекции самих рамок
 	int res_index = 0;
 	for (int idet = 0; idet < selected_detections_num; ++idet) {
 		CvRect input_roi = { Round(sdets[idet].det->bbox.x*im_full.w - sdets[idet].det->bbox.w*im_full.w / 2),
@@ -496,15 +498,15 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 		if (demo_images_ & 2)
 			draw_detections_v3(sized1_, dets1, nboxes1, thresh1_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, ext_output);
 
-		DetectionResult res = FindGroupsByRansac(selected_detections1, selected_detections_num1, names_);
+		DetectionResult res1 = FindGroupsByRansac(selected_detections1, selected_detections_num1, names_);
 
-		if (res.is_good)
+		if (res1.is_good) // найдено хоть какое-то вразумительное соответствие по 1й попытке поворота
 		{
 			if (demo_images_ & 2)
-				PrintResults(res, selected_detections1, names_);
+				PrintResults(res1, selected_detections1, names_);
 
 			// 2я попытка
-			const float k = res.tops.size() > res.bottoms.size() ? res.k_top : res.k_bottom;
+			const float k = res1.tops.size() > res1.bottoms.size() ? res1.k_top : res1.k_bottom;
 			float gamma = sdets[idet].det->extra_features[2] + atanf(k) * 2/float(CV_PI); // -> (-1..1)
 			gamma = (gamma > 1) ? (gamma - 2) : (gamma < -1 ? (gamma + 2) : gamma);
 			IplImage* restored_mat2 = RestoreImage(input_image, input_roi,
@@ -531,17 +533,18 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 				b.h *= net2_.h;
 			}
 
-			DetectionResult res = FindGroupsByRansac(selected_detections2, selected_detections_num2, names_);
+			DetectionResult res2 = FindGroupsByRansac(selected_detections2, selected_detections_num2, names_);
 
 			if (demo_images_)
-				if (res.is_good)
-					PrintResults(res, selected_detections2, names_);
+				if (res2.is_good)
+					PrintResults(res2, selected_detections2, names_);
 			if (demo_images_ & (4 | 1))
 				draw_detections_v3(sized2_, dets2, nboxes2, thresh_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, ext_output);
 
 			// Если распознали плохо, вытаскаиваем из сохраненных результатов, если хорошо - сохраняем
-			if (CheckResultValidity(res))
+			if (CheckResultValidity(res2)) // результат найден и соответствует шаблону
 			{
+				// Удаляем старый результат и сохраняем новый
 				for (auto it = saved_results_.begin(); it != saved_results_.end(); )
 				{
 					if (box_iou(sdets[idet].det->bbox, it->first) > 0.5)
@@ -549,32 +552,34 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 					else
 						++it;
 				}
-				res.det_ptr = &sdets[idet];
-				saved_results_.push_back(std::make_pair(sdets[idet].det->bbox, res));
+				res2.det_ptr = &sdets[idet];
+				saved_results_.push_back(std::make_pair(sdets[idet].det->bbox, res2));
 
-				if (sized2_.data)
-				{
-					char bbb[100];
-					sprintf(bbb, "%s%05d %s %s", out_root.c_str(), no_++, res.strings[0].c_str(), res.strings[2].c_str());
-					save_image(sized2_, bbb);
-					std::fstream f(std::string(bbb) + ".txt", std::ios::out);
-					for (int i : res.tops)
-						ToFile(f, selected_detections2[i], net2_.w, net2_.h);
-					for (int i : res.middles)
-						ToFile(f, selected_detections2[i], net2_.w, net2_.h);
-					for (int i : res.bottoms)
-						ToFile(f, selected_detections2[i], net2_.w, net2_.h);
+				if (0) { // сохранение картинок для обученияч
+					if (sized2_.data)
+					{
+						char bbb[100];
+						sprintf(bbb, "%s%05d %s %s", out_root.c_str(), no_++, res2.strings[0].c_str(), res2.strings[2].c_str());
+						save_image(sized2_, bbb);
+						std::fstream f(std::string(bbb) + ".txt", std::ios::out);
+						for (int i : res2.tops)
+							ToFile(f, selected_detections2[i], net2_.w, net2_.h);
+						for (int i : res2.middles)
+							ToFile(f, selected_detections2[i], net2_.w, net2_.h);
+						for (int i : res2.bottoms)
+							ToFile(f, selected_detections2[i], net2_.w, net2_.h);
+					}
 				}
-
-
 			}
-			else
+			else // результат не соответствует шаблону или вообще кривой
 			{
+				// оставляем старый сохраненный результат, обновляем положение
 				for (auto it = saved_results_.begin(); it != saved_results_.end(); ++it)
 				{
 					if (box_iou(sdets[idet].det->bbox, it->first) > 0.5)
 					{
-						res = it->second;
+						it->first = sdets[idet].det->bbox;
+						//res2 = it->second;
 						break;
 					}
 				}
@@ -589,13 +594,13 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 			// prohibit draw of dets if !res.is_good
 			for (int i = 0; i < net1_.layers[net1_.n - 1].classes; ++i)
 				sdets[idet].det->prob[i] = 0;
-		}
+		}	//  if найдено хоть какое-то вразумительное соответствие по 1й попытке поворота
 
 		free(selected_detections1);
 		free_image(found1);
 		cvReleaseImage(&restored_mat);
 		cvReleaseImage(&input_image);
-	} //for (int idet = 0
+	} //for (int idet = 0  // Цикл по результатам детекции самих рамок
 
 	if (demo_images_ & 1)
 	{
