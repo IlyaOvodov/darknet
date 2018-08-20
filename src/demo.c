@@ -108,10 +108,11 @@ image get_image_from_stream_continuous(void* context, int w, int h, int c, IplIm
 		cvReleaseImage(&got_img);
 		return make_empty_image(0, 0, 0);
 	}
+	//cvSetImageROI(got_img, cvRect(108, 0, 1224, 816));
 	if (w == 0)
-		w = got_img->width;
+		w = got_img->roi->width;
 	if (h == 0)
-		h = got_img->height;
+		h = got_img->roi->height;
 	IplImage* new_img = cvCreateImage(cvSize(w, h), IPL_DEPTH_8U, c);
 	*in_img = cvCreateImage(cvSize(got_img->width, got_img->height), IPL_DEPTH_8U, c);
 	cvResize(got_img, *in_img, CV_INTER_LINEAR);
@@ -203,7 +204,7 @@ void *detect_in_thread(void *ptr)
 void *detect_in_thread_bar(void *ptr)
 {
 	if (!det_s.data)
-		return;
+		return 0;
 
 	ipl_images[demo_index] = det_img;
 	IplImage* det_img_to_draw = ipl_images[(demo_index + FRAMES / 2 + 1) % FRAMES];
@@ -526,11 +527,11 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 	if (!prefix && !dont_show) {
 		cvNamedWindow("Demo", CV_WINDOW_NORMAL);
 		cvMoveWindow("Demo", 0, 0);
-		cvResizeWindow("Demo", 1920/3, 1080/3);
+		cvResizeWindow("Demo", 1080 * det_img->width / det_img->height / 2, 1080/2);
 
-		cvNamedWindow("Demo2", CV_WINDOW_NORMAL);
-		cvMoveWindow("Demo2", 100, 100);
-		cvResizeWindow("Demo2", 1920 / 4, 1080 / 4);
+		//cvNamedWindow("Demo2", CV_WINDOW_NORMAL);
+		//cvMoveWindow("Demo2", 100, 100);
+		//cvResizeWindow("Demo2", 1920 / 4, 1080 / 4);
 	}
 
 	CvVideoWriter* output_video_writer = NULL;    // cv::VideoWriter output_video;
@@ -627,8 +628,8 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 				det_s = in_s;
 				in_s.data = 0;
 				in_img = 0;
-				if (!dont_show)
-					show_image_cv_ipl(det_img, "Demo2");
+				//if (!dont_show)
+				//	show_image_cv_ipl(det_img, "Demo2");
 			}
 			pthread_mutex_unlock(&in_s_mutex);
 		}
