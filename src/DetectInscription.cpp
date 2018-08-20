@@ -371,23 +371,24 @@ bool CheckResultValidity(const DetectionResult& res)
 
 void DrawDetections(IplImage* im_demo, const AggrDetectionResult& res, int res_index)
 {
+	double draw_k = 2;
 	bool is_correct = CheckResultValidity(res.aggr);
 	if (!is_correct)
 		return;
 	for (int i=0; i<3; ++i)
 	{
-		int left = Round(im_demo->width * .005);
+		int left = Round(im_demo->width * .005 * draw_k);
 		//int width = im_demo->height * .006;
-		int font_size = Round(im_demo->height * .001f);
-		int rect_h = Round(10 + 25 * font_size);
-		int base_y = Round(im_demo->width * .005 + rect_h + rect_h * (4*res_index + i));//im_demo->height * .001;
-		int right = left + Round(10 + 25 * font_size * 11);
+		int font_size = Round(im_demo->height * .001f * draw_k);
+		int rect_h = Round(10 * draw_k + 25 * font_size);
+		int base_y = Round(im_demo->width * .005 * draw_k + rect_h + rect_h * (4*res_index + i));//im_demo->height * .001;
+		int right = left + Round(10 * draw_k + 25 * font_size * 11);
 
 		CvScalar color = cvScalar(196, 255, 255, 0);
 
 		CvPoint pt_text, pt_text_bg1, pt_text_bg2;
 		pt_text.x = left;
-		pt_text.y = base_y-5;
+		pt_text.y = base_y - 5 * draw_k;
 		pt_text_bg1.x = left;
 		pt_text_bg1.y = base_y - rect_h;
 		pt_text_bg2.x = right;
