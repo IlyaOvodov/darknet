@@ -4,6 +4,11 @@
 *.out
 *.png
 *.so
+*.suo
+*.db
+*.opendb
+*.user
+*.pdb
 mnist/
 data/
 caffe/
@@ -14,7 +19,8 @@ convnet/
 decaf/
 submission/
 cfg/
-darknet
+#darknet
+x64/
 .fuse*
 
 # OS Generated #
