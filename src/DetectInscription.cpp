@@ -621,7 +621,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 					saved_results_.push_back(std::make_pair(sdets[idet].det->bbox, r));
 				}
 
-				if (1) { // сохранение картинок для обученияч
+				if (0) { // сохранение картинок для обученияч
 					if (sized2_.data)
 					{
 						char bbb[100];
