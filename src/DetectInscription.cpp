@@ -28,8 +28,14 @@ extern "C" {
 #include "BarcodeDemo.h"
 #endif
 
-std::string out_root = "E:\\iovodov\\Barcodes\\RealImagesExport\\";
+// Hardcoded constants
+std::string kOutRoot = "D:\\Programming\\BarcodesDemoDump\\";
+
 const int kMaxLifetime = 1;
+const float kIouThr = 0.5;
+const float kThreshold0 = 0.1f; //0.3
+const float kThreshold1 = 0.1f;
+const float kThreshold2 = 0.1f;
 
 struct DetectionResult
 {
@@ -70,8 +76,9 @@ private:
 	void FreeSavedImages();
 	void ToFile(std::fstream& f, const detection_with_class& det, int w, int h);
 
-	float thresh_ = 0;
-	float thresh1_ = 0.1f;
+	float thresh_ = kThreshold0;
+	float thresh1_ = kThreshold1;
+	float thresh2_ = kThreshold2;
 	int demo_images_ = 0;
 
 	network net1_ = {};
@@ -92,7 +99,7 @@ private:
 BarcodesDecoder::BarcodesDecoder(char *datacfg, char *cfgfile1, char *weightfile1, float thresh, int demo_images)
 	: thresh_(thresh), demo_images_(demo_images)
 {
-	thresh_ = 0.3f; //GVNC
+	thresh_ = kThreshold0; //GVNC
 
 	list *options = read_data_cfg(datacfg);
 	char *cfgfile2 = option_find_str(options, "cfgfile2", "cfg2.cfg");
@@ -576,11 +583,11 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 			float *X = sized2_.data;
 			network_predict(net2_, X);
 			int nboxes2 = 0;
-			detection *dets2 = get_network_boxes(&net2_, sized2_.w, sized2_.h, thresh_, 0, 0, 1, &nboxes2, 0);
+			detection *dets2 = get_network_boxes(&net2_, sized2_.w, sized2_.h, thresh2_, 0, 0, 1, &nboxes2, 0);
 			do_nms_obj(dets2, nboxes2, net2_.layers[net2_.n - 1].classes, nms2);
 
 			int selected_detections_num2;
-			detection_with_class* selected_detections2 = get_actual_detections(dets2, nboxes2, thresh_, &selected_detections_num2);
+			detection_with_class* selected_detections2 = get_actual_detections(dets2, nboxes2, thresh2_, &selected_detections_num2);
 			// text output
 			qsort(selected_detections2, selected_detections_num2, sizeof(*selected_detections2), compare_by_lefts);
 			for (int i = 0; i < selected_detections_num2; ++i)
@@ -598,7 +605,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 				if (res2.is_good)
 					PrintResults(res2, selected_detections2, names_);
 			if (demo_images_ & (4 | 1))
-				draw_detections_v3(sized2_, dets2, nboxes2, thresh_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, ext_output);
+				draw_detections_v3(sized2_, dets2, nboxes2, thresh2_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, ext_output);
 
 			// Если распознали плохо, вытаскаиваем из сохраненных результатов, если хорошо - сохраняем
 			if (res2.is_good) // результат найден и вразумительный
@@ -614,11 +621,11 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 					saved_results_.push_back(std::make_pair(sdets[idet].det->bbox, r));
 				}
 
-				if (0) { // сохранение картинок для обученияч
+				if (1) { // сохранение картинок для обученияч
 					if (sized2_.data)
 					{
 						char bbb[100];
-						sprintf(bbb, "%s%05d %s %s", out_root.c_str(), no_++, res2.strings[0].c_str(), res2.strings[2].c_str());
+						sprintf(bbb, "%s%05d %s %s", kOutRoot.c_str(), no_++, res2.strings[0].c_str(), res2.strings[2].c_str());
 						save_image(sized2_, bbb);
 						std::fstream f(std::string(bbb) + ".txt", std::ios::out);
 						for (int i : res2.tops)
@@ -659,7 +666,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 		if (it->second.lifetime == 0)
 			continue; // уже нашли нормальную пару
 		auto best_it_bbox = only_bbox_detections_.end();
-		float best_iou = 0.5;
+		float best_iou = kIouThr;
 		for (auto it_bbox = only_bbox_detections_.begin(); it_bbox != only_bbox_detections_.end(); ++it_bbox)
 		{
 			float iou = box_iou(*it_bbox, it->first);
