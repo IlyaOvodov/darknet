@@ -29,6 +29,7 @@ extern "C" {
 #endif
 
 std::string out_root = "E:\\iovodov\\Barcodes\\RealImagesExport\\";
+const int kMaxLifetime = 1;
 
 struct DetectionResult
 {
@@ -504,7 +505,6 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 	const float nms1 = 0.1f;
 	const float nms2 = 0.2f;
 	int letterbox = 0;
-	const int kMaxLifetime = 20;
 
 	FreeSavedImages();
 
