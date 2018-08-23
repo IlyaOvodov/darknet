@@ -59,6 +59,7 @@ typedef struct network{
     float saturation;
     float hue;
 	int small_object;
+	int blur_kernel;
 
     int gpu_index;
     tree *hierarchy;
