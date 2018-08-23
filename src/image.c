@@ -285,23 +285,25 @@ void draw_detections_v3(image im, detection *dets, int num, float thresh, char *
 	int i;
 	for (i = 0; i < selected_detections_num; ++i) {
 		const int best_class = selected_detections[i].best_class;
-		printf("%s: %.0f%%", names[best_class],	selected_detections[i].det->prob[best_class] * 100);
-		if (ext_output) {
-			printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)",
-				(selected_detections[i].det->bbox.x - selected_detections[i].det->bbox.w / 2)*im.w,
-				(selected_detections[i].det->bbox.y - selected_detections[i].det->bbox.h / 2)*im.h,
-				selected_detections[i].det->bbox.w*im.w, selected_detections[i].det->bbox.h*im.h
-			);
-			int ef_i;
-			for (ef_i = 0; ef_i < selected_detections[i].det->extra_features_num; ++ef_i) {
-				if (ef_i == 0)
-					printf("  angl: ");
-				printf("%4.2f ", selected_detections[i].det->extra_features[ef_i]);
+		if (ext_output >= 0) {
+			printf("%s: %.0f%%", names[best_class], selected_detections[i].det->prob[best_class] * 100);
+			if (ext_output) {
+				printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)",
+					(selected_detections[i].det->bbox.x - selected_detections[i].det->bbox.w / 2)*im.w,
+					(selected_detections[i].det->bbox.y - selected_detections[i].det->bbox.h / 2)*im.h,
+					selected_detections[i].det->bbox.w*im.w, selected_detections[i].det->bbox.h*im.h
+				);
+				int ef_i;
+				for (ef_i = 0; ef_i < selected_detections[i].det->extra_features_num; ++ef_i) {
+					if (ef_i == 0)
+						printf("  angl: ");
+					printf("%4.2f ", selected_detections[i].det->extra_features[ef_i]);
+				}
+				printf(")\n");
 			}
-			printf(")\n");
-		}
-		else {
-			printf("\n");
+			else {
+				printf("\n");
+			}
 		}
 		int j;
 		for (j = 0; j < classes; ++j) {
@@ -580,11 +582,13 @@ void draw_detections_cv_v3(IplImage* show_img, detection *dets, int num, float t
 			//cvResetImageROI(copy_img);
 
 			cvRectangle(show_img, pt1, pt2, color, width, 8, 0);
-			if (ext_output)
-				printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)\n", 
-					(float)left, (float)top, b.w*show_img->width, b.h*show_img->height);
-			else
-				printf("\n");
+			if (ext_output >=0) {
+				if (ext_output)
+					printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)\n", 
+						(float)left, (float)top, b.w*show_img->width, b.h*show_img->height);
+				else
+					printf("\n");
+			}
 			//cvRectangle(show_img, pt_text_bg1, pt_text_bg2, color, width, 8, 0);
 			//cvRectangle(show_img, pt_text_bg1, pt_text_bg2, color, CV_FILLED, 8, 0);	// filled
 			CvScalar black_color;

@@ -29,6 +29,7 @@ extern "C" {
 #endif
 
 std::string out_root = "E:\\iovodov\\Barcodes\\RealImagesExport\\";
+const int kMaxLifetime = 1;
 
 struct DetectionResult
 {
@@ -39,10 +40,19 @@ struct DetectionResult
 	std::vector<int> middles;
 	std::vector<int> bottoms;
 	std::vector<int> outliers;
+	std::vector<int> classes[4];
+	std::vector<float> probs[4];
 	std::string strings[4]; // top, mid, bottom, outliers
-	detection_with_class* det_ptr = 0;
 };
 
+struct AggrDetectionResult
+{
+	AggrDetectionResult(const DetectionResult& r) :aggr(r), current(r) {}
+
+	DetectionResult aggr;
+	DetectionResult current;
+	int lifetime = 0;
+};
 
 class BarcodesDecoder
 {
@@ -53,6 +63,10 @@ public:
 	void ShowImages(int images);
 	void SaveImages(int images);
 private:
+	typedef std::vector<std::pair<box, AggrDetectionResult>> SavedResultsVect;
+
+	SavedResultsVect::iterator FindBestFit(box bbox, const DetectionResult& res);
+	void UpdateFit(SavedResultsVect::iterator fit, box bbox, const DetectionResult& res);
 	void FreeSavedImages();
 	void ToFile(std::fstream& f, const detection_with_class& det, int w, int h);
 
@@ -69,7 +83,9 @@ private:
 	image sized1_ = {0};
 	image sized2_ = { 0 };
 
-	std::vector<std::pair<box, DetectionResult>> saved_results_;
+	std::vector<box> only_bbox_detections_; // –амки, от которых детектировалс€ только bbox
+
+	SavedResultsVect saved_results_;
 	int no_ = 0;
 };
 
@@ -303,6 +319,8 @@ DetectionResult FindGroupsByRansac(detection_with_class* selected_detections, in
 			for (int idx : idx_vect)
 			{
 				const int best_class = selected_detections[idx].best_class;
+				best_res.classes[i].push_back(best_class);
+				best_res.probs[i].push_back(selected_detections[idx].det->prob_raw[best_class]);
 				best_res.strings[i] += std::string(names[best_class]);
 			}
 		}
@@ -352,25 +370,26 @@ bool CheckResultValidity(const DetectionResult& res)
 	return b;
 }
 
-void DrawDetections(IplImage* im_demo, const DetectionResult& res, int res_index)
+void DrawDetections(IplImage* im_demo, const AggrDetectionResult& res, int res_index)
 {
-	bool is_correct = CheckResultValidity(res);
+	double draw_k = 2;
+	bool is_correct = CheckResultValidity(res.aggr);
 	if (!is_correct)
 		return;
 	for (int i=0; i<3; ++i)
 	{
-		int left = Round(im_demo->width * .005);
-		int right = Round(im_demo->width * .155);
+		int left = Round(im_demo->width * .005 * draw_k);
 		//int width = im_demo->height * .006;
-		int font_size = Round(im_demo->height * .001f);
-		int rect_h = Round(10 + 25 * font_size);
-		int base_y = Round(im_demo->width * .005 + rect_h + rect_h * (4*res_index + i));//im_demo->height * .001;
+		int font_size = Round(im_demo->height * .001f * draw_k);
+		int rect_h = Round(10 * draw_k + 25 * font_size);
+		int base_y = Round(im_demo->width * .005 * draw_k + rect_h + rect_h * (4*res_index + i));//im_demo->height * .001;
+		int right = left + Round(10 * draw_k + 25 * font_size * 11);
 
-		CvScalar color = cvScalar(224, 224, 224, 0);
+		CvScalar color = cvScalar(196, 255, 255, 0);
 
 		CvPoint pt_text, pt_text_bg1, pt_text_bg2;
 		pt_text.x = left;
-		pt_text.y = base_y-5;
+		pt_text.y = base_y - 5 * draw_k;
 		pt_text_bg1.x = left;
 		pt_text_bg1.y = base_y - rect_h;
 		pt_text_bg2.x = right;
@@ -381,7 +400,7 @@ void DrawDetections(IplImage* im_demo, const DetectionResult& res, int res_index
 		CvScalar font_color = is_correct ? cvScalar(0,0,0,0) : cvScalar(127, 127, 127, 0);
 		CvFont font;
 		cvInitFont(&font, CV_FONT_HERSHEY_SIMPLEX, font_size, font_size, 0, font_size * 3, 8);
-		std::string s = res.strings[i];
+		std::string s = res.aggr.strings[i];
 		if (i == 2 && is_correct)
 		{
 			int x = left;
@@ -425,8 +444,64 @@ void BarcodesDecoder::ToFile(std::fstream& f, const detection_with_class& d, int
 		<< " " << d.det->extra_features[0] << " " << d.det->extra_features[1] << " " << d.det->extra_features[2] << '\n';
 }
 
+
+double ResultQuality(const DetectionResult& res)
+{
+	double q = CheckResultValidity(res) ? 1000. : 0;
+	for (int i = 0; i < 3; ++i)
+		for (int j = 0; j < res.probs[i].size(); ++j)
+			q += res.probs[i][j];
+	return q;
+}
+
+double ResultsDistance(const DetectionResult& res1, const DetectionResult& res2)
+{
+	double d = 0;
+	for (int i = 0; i < 3; ++i)
+		for (size_t j = 0; j < std::max(res1.classes[i].size(), res2.classes[i].size()); ++j)
+		{
+			if (j >= res1.classes[i].size() || j >= res2.classes[i].size())
+				d += 1.;
+			else
+				if (res1.classes[i][j] != res2.classes[i][j])
+					d += 1.; // TODO учитывать веро€тности, учитывать пропуски
+		}
+	return d;
+}
+
+BarcodesDecoder::SavedResultsVect::iterator BarcodesDecoder::FindBestFit(box bbox, const DetectionResult& res)
+{
+	auto best = saved_results_.end();
+	double best_dist = 1000000;
+	for (auto it = saved_results_.begin(); it != saved_results_.end(); ++it)
+	{
+		double dist = ResultsDistance(res, it->second.aggr);
+		if (dist < best_dist)
+		{
+			best_dist = dist;
+			best = it;
+		}
+	}
+	if (best_dist < 3)
+		return best;
+	else
+		return saved_results_.end();
+}
+
+void BarcodesDecoder::UpdateFit(SavedResultsVect::iterator fit, box bbox, const DetectionResult& res)
+{
+	fit->second.current = res;
+	fit->second.lifetime = 0;
+	if (ResultQuality(res) > ResultQuality(fit->second.aggr))
+		fit->second.aggr = res;
+}
+
+
+
 void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im_demo)
 {
+	const int ext_output = -1;
+
 	const float nms1 = 0.1f;
 	const float nms2 = 0.2f;
 	int letterbox = 0;
@@ -443,25 +518,13 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 	int selected_detections_num;
 	detection_with_class* sdets = get_actual_detections(dets, nboxes, thresh_, &selected_detections_num);
 
-	for (auto it = saved_results_.begin(); it != saved_results_.end(); )
+	for (auto it = saved_results_.begin(); it != saved_results_.end(); ++it)
 	{
-		it->second.det_ptr = 0;
-		bool found = false;
-		for (int d = 0; d < selected_detections_num; ++d)
-		{
-			if (box_iou(sdets[d].det->bbox, it->first) > 0.5)
-			{
-				found = true;
-				break;
-			}
-		}
-		if (found)
-			++it;
-		else
-			it = saved_results_.erase(it);
+		--it->second.lifetime;
 	}
 
-	int res_index = 0;
+	// ÷икл по результатам детекции самих рамок
+	only_bbox_detections_.clear();
 	for (int idet = 0; idet < selected_detections_num; ++idet) {
 		CvRect input_roi = { Round(sdets[idet].det->bbox.x*im_full.w - sdets[idet].det->bbox.w*im_full.w / 2),
 			Round(sdets[idet].det->bbox.y*im_full.h - sdets[idet].det->bbox.h*im_full.h / 2), Round(sdets[idet].det->bbox.w*im_full.w), Round(sdets[idet].det->bbox.h*im_full.h) };
@@ -492,17 +555,17 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 			b.h *= net2_.h;
 		}
 		if (demo_images_ & 2)
-			draw_detections_v3(sized1_, dets1, nboxes1, thresh1_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, 1);
+			draw_detections_v3(sized1_, dets1, nboxes1, thresh1_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, ext_output);
 
-		DetectionResult res = FindGroupsByRansac(selected_detections1, selected_detections_num1, names_);
+		DetectionResult res1 = FindGroupsByRansac(selected_detections1, selected_detections_num1, names_);
 
-		if (res.is_good)
+		if (res1.is_good) // найдено хоть какое-то вразумительное соответствие по 1й попытке поворота
 		{
 			if (demo_images_ & 2)
-				PrintResults(res, selected_detections1, names_);
+				PrintResults(res1, selected_detections1, names_);
 
 			// 2€ попытка
-			const float k = res.tops.size() > res.bottoms.size() ? res.k_top : res.k_bottom;
+			const float k = res1.tops.size() > res1.bottoms.size() ? res1.k_top : res1.k_bottom;
 			float gamma = sdets[idet].det->extra_features[2] + atanf(k) * 2/float(CV_PI); // -> (-1..1)
 			gamma = (gamma > 1) ? (gamma - 2) : (gamma < -1 ? (gamma + 2) : gamma);
 			IplImage* restored_mat2 = RestoreImage(input_image, input_roi,
@@ -529,53 +592,47 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 				b.h *= net2_.h;
 			}
 
-			DetectionResult res = FindGroupsByRansac(selected_detections2, selected_detections_num2, names_);
+			DetectionResult res2 = FindGroupsByRansac(selected_detections2, selected_detections_num2, names_);
 
 			if (demo_images_)
-				if (res.is_good)
-					PrintResults(res, selected_detections2, names_);
+				if (res2.is_good)
+					PrintResults(res2, selected_detections2, names_);
 			if (demo_images_ & (4 | 1))
-				draw_detections_v3(sized2_, dets2, nboxes2, thresh_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, 1);
+				draw_detections_v3(sized2_, dets2, nboxes2, thresh_, names_, alphabet_, net2_.layers[net2_.n - 1].classes, ext_output);
 
 			// ≈сли распознали плохо, вытаскаиваем из сохраненных результатов, если хорошо - сохран€ем
-			if (CheckResultValidity(res))
+			if (res2.is_good) // результат найден и вразумительный
 			{
-				for (auto it = saved_results_.begin(); it != saved_results_.end(); )
+				auto saved_it = FindBestFit(sdets[idet].det->bbox, res2);
+				if (saved_it != saved_results_.end())
 				{
-					if (box_iou(sdets[idet].det->bbox, it->first) > 0.5)
-						it = saved_results_.erase(it);
-					else
-						++it;
+					UpdateFit(saved_it, sdets[idet].det->bbox, res2);
 				}
-				res.det_ptr = &sdets[idet];
-				saved_results_.push_back(std::make_pair(sdets[idet].det->bbox, res));
-
-				if (sized2_.data)
+				else
 				{
-					char bbb[100];
-					sprintf(bbb, "%s%05d %s %s", out_root.c_str(), no_++, res.strings[0].c_str(), res.strings[2].c_str());
-					save_image(sized2_, bbb);
-					std::fstream f(std::string(bbb) + ".txt", std::ios::out);
-					for (int i : res.tops)
-						ToFile(f, selected_detections2[i], net2_.w, net2_.h);
-					for (int i : res.middles)
-						ToFile(f, selected_detections2[i], net2_.w, net2_.h);
-					for (int i : res.bottoms)
-						ToFile(f, selected_detections2[i], net2_.w, net2_.h);
+					AggrDetectionResult r(res2);
+					saved_results_.push_back(std::make_pair(sdets[idet].det->bbox, r));
 				}
 
-
-			}
-			else
-			{
-				for (auto it = saved_results_.begin(); it != saved_results_.end(); ++it)
-				{
-					if (box_iou(sdets[idet].det->bbox, it->first) > 0.5)
+				if (0) { // сохранение картинок дл€ обучени€ч
+					if (sized2_.data)
 					{
-						res = it->second;
-						break;
+						char bbb[100];
+						sprintf(bbb, "%s%05d %s %s", out_root.c_str(), no_++, res2.strings[0].c_str(), res2.strings[2].c_str());
+						save_image(sized2_, bbb);
+						std::fstream f(std::string(bbb) + ".txt", std::ios::out);
+						for (int i : res2.tops)
+							ToFile(f, selected_detections2[i], net2_.w, net2_.h);
+						for (int i : res2.middles)
+							ToFile(f, selected_detections2[i], net2_.w, net2_.h);
+						for (int i : res2.bottoms)
+							ToFile(f, selected_detections2[i], net2_.w, net2_.h);
 					}
 				}
+			}
+			else // результат не соответствует шаблону или вообще кривой
+			{
+				only_bbox_detections_.push_back(sdets[idet].det->bbox);
 			}
 
 			free(selected_detections2);
@@ -587,26 +644,62 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 			// prohibit draw of dets if !res.is_good
 			for (int i = 0; i < net1_.layers[net1_.n - 1].classes; ++i)
 				sdets[idet].det->prob[i] = 0;
-		}
+		}	//  if найдено хоть какое-то вразумительное соответствие по 1й попытке поворота
 
 		free(selected_detections1);
 		free_image(found1);
 		cvReleaseImage(&restored_mat);
 		cvReleaseImage(&input_image);
-	} //for (int idet = 0
+	} //for (int idet = 0  // ÷икл по результатам детекции самих рамок
+
+	// те рамки, от которых затектировались только положени€,
+	// сопоставл€ем с теми имеющимис€, которые ни с чем не сопоставились
+	for (auto it = saved_results_.begin(); it != saved_results_.end(); ++it)
+	{
+		if (it->second.lifetime == 0)
+			continue; // уже нашли нормальную пару
+		auto best_it_bbox = only_bbox_detections_.end();
+		float best_iou = 0.5;
+		for (auto it_bbox = only_bbox_detections_.begin(); it_bbox != only_bbox_detections_.end(); ++it_bbox)
+		{
+			float iou = box_iou(*it_bbox, it->first);
+			if (iou < best_iou)
+			{
+				best_it_bbox = it_bbox;
+				best_iou = iou;
+			}
+		}
+		if (best_it_bbox != only_bbox_detections_.end())
+		{
+			it->first = *best_it_bbox;
+			it->second.lifetime = 0;
+			only_bbox_detections_.erase(best_it_bbox);
+		}
+	}
+
+	// ”дал€ем, что не нашло пары и отжило свой век
+	for (auto it = saved_results_.begin(); it != saved_results_.end(); )
+	{
+		if (it->second.lifetime > -kMaxLifetime)
+			++it;
+		else
+			it = saved_results_.erase(it);
+	}
 
 	if (demo_images_ & 1)
 	{
 		std::sort(saved_results_.begin(), saved_results_.end(),
-				[](const std::pair<box, DetectionResult> a, std::pair<box, const DetectionResult> b)->bool
+				[](const std::pair<box, AggrDetectionResult> a, std::pair<box, const AggrDetectionResult> b)->bool
 				{
 					return a.first.x < b.first.x;
 				}
 			);
 
+		int res_index = 0;
 		for (auto& res: saved_results_)
-			DrawDetections(im_demo, res.second, res_index++);
-		draw_detections_cv_v3(im_demo, dets, nboxes, thresh_, names_, alphabet_, net1_.layers[net1_.n - 1].classes, 1 /*ext_output*/);
+			if (CheckResultValidity(res.second.aggr))
+				DrawDetections(im_demo, res.second, res_index++);
+		draw_detections_cv_v3(im_demo, dets, nboxes, thresh_, names_, alphabet_, net1_.layers[net1_.n - 1].classes, ext_output);
 	}
 
 	free(sdets);
