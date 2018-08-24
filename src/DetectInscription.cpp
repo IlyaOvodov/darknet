@@ -31,11 +31,15 @@ extern "C" {
 // Hardcoded constants
 std::string kOutRoot = "D:\\Programming\\BarcodesDemoDump\\";
 
-const int kMaxLifetime = 1;
+const bool kCheckLastLineValidity = false;
+
+const int kMaxLifetime = 10;
 const float kIouThr = 0.5;
 const float kThreshold0 = 0.1f; //0.3
 const float kThreshold1 = 0.1f;
 const float kThreshold2 = 0.1f;
+
+const int kResultDistThr = kCheckLastLineValidity ? 3 : 2;
 
 struct DetectionResult
 {
@@ -48,6 +52,7 @@ struct DetectionResult
 	std::vector<int> outliers;
 	std::vector<int> classes[4];
 	std::vector<float> probs[4];
+	//std::vector<float> coords[4];
 	std::string strings[4]; // top, mid, bottom, outliers
 };
 
@@ -328,12 +333,81 @@ DetectionResult FindGroupsByRansac(detection_with_class* selected_detections, in
 				const int best_class = selected_detections[idx].best_class;
 				best_res.classes[i].push_back(best_class);
 				best_res.probs[i].push_back(selected_detections[idx].det->prob_raw[best_class]);
+				//best_res.coords[i].push_back(selected_detections[idx].det->bbox.x);
 				best_res.strings[i] += std::string(names[best_class]);
 			}
 		}
 
 	return best_res;
 }
+
+
+template <class Vector, class Iterator>
+void ReplaceVector(Vector dst, Iterator dst_start, Iterator dst_end, Iterator src_start, Iterator src_end) {
+	dst_start = dst.erase(dst_start, dst_end);
+	if (dst.empty())
+		dst_start = dst.end();
+	dst.insert(dst_start, src_start, src_end);
+}
+
+
+DetectionResult ImproveResult(DetectionResult res) // передача не по ссылке, меняем
+{
+	/*
+	std::ofstream f("T:\\qwe.txt", std::ios::app);
+
+	char buf[200];
+	sprintf(buf, "%22s\t%22s\t%22s\t%22s\n", res.strings[0].c_str(), res.strings[1].c_str(), res.strings[2].c_str(), res.strings[3].c_str());
+	f << buf;
+
+	//f << res.strings[0].c_str() << "\n";
+	//f << "            " << res.strings[1].c_str() << "\n";
+	//f << res.strings[2].c_str() << "\n";
+	//if (!res.strings[3].empty())
+	//	f << "  outliers: " << res.strings[3].c_str() << "\n" << "\n";
+	*/
+	int dash1 = -1;
+	int dash2 = -1;
+	for (int i = 0; i < res.strings[0].length(); ++i) {
+		if (res.strings[0][i] == '-') {
+			if (dash1 < 0)
+				dash1 = i;
+			else if (dash2 == 0)
+				dash2 = i;
+			else
+				dash1 = dash2 = -1;
+		}
+	}
+	int str0_mid_len = (dash1 >= 0 && dash2 >= 0) ? (dash2 - dash1 - 1) : -1;
+	if (str0_mid_len == 3 && res.strings[1].length() == 3)
+	{
+		for (int i = 0; i < res.strings[1].length(); ++i) {
+			if (res.probs[0][dash1 + 1 + i] > res.probs[1][i]) {
+				res.probs[1][i] = res.probs[0][dash1 + 1 + i];
+				res.classes[1][i] = res.classes[0][dash1 + 1 + i];
+				res.strings[1][i] = res.strings[0][dash1 + 1 + i];
+			}
+			else {
+				res.probs[0][dash1 + 1 + i] = res.probs[1][i];
+				res.classes[0][dash1 + 1 + i] = res.classes[1][i];
+				res.strings[0][dash1 + 1 + i] = res.strings[1][i];
+			}
+		}
+	}
+	else if (str0_mid_len >= 0 && str0_mid_len > res.strings[1].length()) {
+		ReplaceVector(res.probs[1], res.probs[1].begin(), res.probs[1].end(), res.probs[0].begin() + dash1 + 1, res.probs[0].begin() + dash2);
+		ReplaceVector(res.classes[1], res.classes[1].begin(), res.classes[1].end(), res.classes[0].begin() + dash1 + 1, res.classes[0].begin() + dash2);
+		ReplaceVector(res.strings[1], res.strings[1].begin(), res.strings[1].end(), res.strings[0].begin() + dash1 + 1, res.strings[0].begin() + dash2);
+	}
+	else if (str0_mid_len >= 0 && str0_mid_len < res.strings[1].length()) {
+		ReplaceVector(res.probs[0], res.probs[0].begin() + dash1 + 1, res.probs[0].begin() + dash2, res.probs[1].begin(), res.probs[1].end());
+		ReplaceVector(res.classes[0], res.classes[0].begin() + dash1 + 1, res.classes[0].begin() + dash2, res.classes[1].begin(), res.classes[1].end());
+		ReplaceVector(res.strings[0], res.strings[0].begin() + dash1 + 1, res.strings[0].begin() + dash2, res.strings[1].begin(), res.strings[1].end());
+	}
+
+	return res;
+}
+
 
 template<class T>
 int Round(T x) { return static_cast<int>(x + T(0.5)); }
@@ -349,19 +423,21 @@ void PrintResults(const DetectionResult& res, detection_with_class* selected_det
 	printf("\nk: %4.2f %4.2f \n", res.k_top, res.k_bottom);
 }
 
-bool CheckResultValidity(const DetectionResult& res)
+bool CheckResultValidity(const DetectionResult& res, bool check_last_line)
 {
 	bool b = res.strings[0].length() == 9
 		&& res.strings[1].length() == 3
-		&& res.strings[2].length() == 20
 		&& res.strings[0].c_str()[2] == '-'
 		&& res.strings[0].c_str()[6] == '-'
 		&& res.strings[1] == res.strings[0].substr(3, 3)
+		
+		&& ( res.strings[2].length() == 20
 		&& res.strings[2].c_str()[0] == res.strings[2].c_str()[2]
 		&& res.strings[2].c_str()[4] == res.strings[2].c_str()[6]
 		&& res.strings[2].c_str()[8] == res.strings[2].c_str()[10]
 		&& res.strings[2].c_str()[12] == res.strings[2].c_str()[14]
 		&& res.strings[2].c_str()[16] == res.strings[2].c_str()[18]
+		|| !check_last_line)
 		&& isdigit(res.strings[0].c_str()[0])
 		&& isdigit(res.strings[0].c_str()[1])
 		&& isdigit(res.strings[0].c_str()[3])
@@ -380,7 +456,7 @@ bool CheckResultValidity(const DetectionResult& res)
 void DrawDetections(IplImage* im_demo, const AggrDetectionResult& res, int res_index)
 {
 	double draw_k = 2;
-	bool is_correct = CheckResultValidity(res.aggr);
+	bool is_correct = CheckResultValidity(res.aggr, kCheckLastLineValidity);
 	if (!is_correct)
 		return;
 	for (int i=0; i<3; ++i)
@@ -408,7 +484,7 @@ void DrawDetections(IplImage* im_demo, const AggrDetectionResult& res, int res_i
 		CvFont font;
 		cvInitFont(&font, CV_FONT_HERSHEY_SIMPLEX, font_size, font_size, 0, font_size * 3, 8);
 		std::string s = res.aggr.strings[i];
-		if (i == 2 && is_correct)
+		if (i == 2 && CheckResultValidity(res.aggr, true))
 		{
 			int x = left;
 			int step = 38 * font_size;
@@ -454,25 +530,43 @@ void BarcodesDecoder::ToFile(std::fstream& f, const detection_with_class& d, int
 
 double ResultQuality(const DetectionResult& res)
 {
-	double q = CheckResultValidity(res) ? 1000. : 0;
+	double q = CheckResultValidity(res, kCheckLastLineValidity) ? 1000. : 0;
 	for (int i = 0; i < 3; ++i)
 		for (int j = 0; j < res.probs[i].size(); ++j)
 			q += res.probs[i][j];
 	return q;
 }
 
+double ResultLineQuality(const DetectionResult& res, int line, int line_template_lenght)
+{
+	double q = (res.classes[line].size() == line_template_lenght) ? 1000. : 0;
+	for (int j = 0; j < res.probs[line].size(); ++j)
+		q += res.probs[line][j];
+	return q;
+}
+
 double ResultsDistance(const DetectionResult& res1, const DetectionResult& res2)
 {
 	double d = 0;
-	for (int i = 0; i < 3; ++i)
+	const int lines_count_to_check = kCheckLastLineValidity ? 3 : 2;
+	for (int i = 0; i < lines_count_to_check; ++i) {
+		double d1 = 0; // l->r
+		double d2 = 0; // r->l
 		for (size_t j = 0; j < std::max(res1.classes[i].size(), res2.classes[i].size()); ++j)
 		{
-			if (j >= res1.classes[i].size() || j >= res2.classes[i].size())
-				d += 1.;
-			else
+			if (j >= res1.classes[i].size() || j >= res2.classes[i].size()) {
+				d1 += 1.;
+				d2 += 1.;
+			}
+			else {
 				if (res1.classes[i][j] != res2.classes[i][j])
-					d += 1.; // TODO учитывать вероятности, учитывать пропуски
+					d1 += 1.; // TODO учитывать вероятности, учитывать пропуски
+				if (res1.classes[i][res1.classes[i].size() - j - 1] != res2.classes[i][res2.classes[i].size() - j -1])
+					d2 += 1.; // TODO учитывать вероятности, учитывать пропуски
+			}
 		}
+		d += std::min(d1, d2);
+	}
 	return d;
 }
 
@@ -489,7 +583,7 @@ BarcodesDecoder::SavedResultsVect::iterator BarcodesDecoder::FindBestFit(box bbo
 			best = it;
 		}
 	}
-	if (best_dist < 3)
+	if (best_dist < kResultDistThr)
 		return best;
 	else
 		return saved_results_.end();
@@ -499,8 +593,21 @@ void BarcodesDecoder::UpdateFit(SavedResultsVect::iterator fit, box bbox, const 
 {
 	fit->second.current = res;
 	fit->second.lifetime = 0;
-	if (ResultQuality(res) > ResultQuality(fit->second.aggr))
-		fit->second.aggr = res;
+	if (ResultLineQuality(res, 0, 9) > ResultLineQuality(fit->second.aggr, 0, 9)) {
+		fit->second.aggr.classes[0] = res.classes[0];
+		fit->second.aggr.probs[0] = res.probs[0];
+		fit->second.aggr.strings[0] = res.strings[0];
+	}
+	if (ResultLineQuality(res, 1, 3) > ResultLineQuality(fit->second.aggr, 1, 3)) {
+		fit->second.aggr.classes[1] = res.classes[1];
+		fit->second.aggr.probs[1] = res.probs[1];
+		fit->second.aggr.strings[1] = res.strings[1];
+	}
+	if (ResultLineQuality(res, 2, 10) > ResultLineQuality(fit->second.aggr, 2, 10)) {
+		fit->second.aggr.classes[2] = res.classes[2];
+		fit->second.aggr.probs[2] = res.probs[2];
+		fit->second.aggr.strings[2] = res.strings[2];
+	}
 }
 
 
@@ -600,6 +707,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 			}
 
 			DetectionResult res2 = FindGroupsByRansac(selected_detections2, selected_detections_num2, names_);
+			res2 = ImproveResult(res2);
 
 			if (demo_images_)
 				if (res2.is_good)
@@ -704,7 +812,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 
 		int res_index = 0;
 		for (auto& res: saved_results_)
-			if (CheckResultValidity(res.second.aggr))
+			if (CheckResultValidity(res.second.aggr, kCheckLastLineValidity))
 				DrawDetections(im_demo, res.second, res_index++);
 		draw_detections_cv_v3(im_demo, dets, nboxes, thresh_, names_, alphabet_, net1_.layers[net1_.n - 1].classes, ext_output);
 	}
