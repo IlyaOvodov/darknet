@@ -2,6 +2,7 @@
 #include "DetectInscription.h"
 
 #include <vector>
+#include <string>
 #include <algorithm>
 #include <ctype.h>
 #include <fstream>
@@ -26,20 +27,100 @@ extern "C" {
 #include "opencv2/imgproc/imgproc_c.h"
 
 #include "BarcodeDemo.h"
+#include "levenstein.hpp"
 #endif
+
+using std::string;
+using std::vector;
 
 // Hardcoded constants
 std::string kOutRoot = "D:\\Programming\\BarcodesDemoDump\\";
 
-const bool kCheckLastLineValidity = false;
+const size_t kDictionaryFitThr = 8;
+
+const bool kCheckLastLineValidity = true;
 
 const int kMaxLifetime = 10;
 const float kIouThr = 0.5;
 const float kThreshold0 = 0.1f; //0.3
 const float kThreshold1 = 0.1f;
+
 const float kThreshold2 = 0.1f;
 
-const int kResultDistThr = kCheckLastLineValidity ? 3 : 2;
+const int kResultDistThr = kCheckLastLineValidity ? 5 : 3;
+
+class CheckDictionary
+{
+public:
+	CheckDictionary() {
+		AddStr("01-708-T9 G8G7B9B3G1G3Y9Y1R1R6");
+		AddStr("02-821-R9 W1W8G5G3Y9Y4W7W6G1G6");
+		AddStr("13-776-W0 G9G9R9R4W3W0G9G1W9W6");
+		AddStr("14-073-F1 W6W2Y9Y6B7B5B5B6Y8Y3");
+		AddStr("25-681-M6 Y0Y3R1R6Y4Y0R9R1G3G5");
+		AddStr("56-330-A2 W7W5B6B1R3R2G4G2R1R7");
+		AddStr("85-009-D5 W6W0Y8Y5Y3Y1G5G7B5B7");
+		AddStr("87-497-E7 R1R7Y6Y9G0G8B3B0R3R7");
+		AddStr("87-939-P7 B4B0R5R6W8W9G4G0R0R8");
+
+		std::ifstream f("ls.txt");
+		for (string s; std::getline(f, s); )
+		{
+			if (strings_.size() > 50)
+				break;
+			AddStr(s.substr(6, 30));
+		}
+		
+		//size_t d = std::numeric_limits<size_t>::max();
+		//for (int i = 0; i < strings_.size(); ++i)
+		//	for (int j = i + 1; j < strings_.size(); ++j)
+		//	{
+		//		size_t di = levenshtein_distance(strings_[i].first, strings_[j].first) + levenshtein_distance(strings_[i].second, strings_[j].second);
+		//		if (di < d)
+		//			d = di;
+		//	}
+		//printf("%d", d);
+	}
+
+	struct FindRes
+	{
+		size_t d = std::numeric_limits<size_t>::max();
+		size_t next_d = std::numeric_limits<size_t>::max();
+		string s0 = "";
+		string s2 = "";
+	};
+
+	FindRes FindBestFit(const string& s0, const string& s2)
+	{
+		FindRes best;
+		for (const auto& si: strings_)
+		{
+			size_t di = levenshtein_distance(si.first, s0) + levenshtein_distance(si.second, s2);
+			if (di < best.d)
+			{
+				best.next_d = best.d;
+				best.d = di;
+				best.s0 = si.first;
+				best.s2 = si.second;
+			}
+			else if (di < best.next_d)
+			{
+				best.next_d = di;
+			}
+		}
+		return best;
+	}
+
+private:
+	void AddStr(const string& s) {
+		strings_.push_back(
+			std::make_pair(s.substr(0, 9), s.substr(10))
+		);
+	}
+
+	vector<std::pair<string, string>> strings_;
+};
+
 
 struct DetectionResult
 {
@@ -99,6 +180,8 @@ private:
 
 	SavedResultsVect saved_results_;
 	int no_ = 0;
+
+	CheckDictionary dict_;
 };
 
 BarcodesDecoder::BarcodesDecoder(char *datacfg, char *cfgfile1, char *weightfile1, float thresh, int demo_images)
@@ -472,7 +555,7 @@ void DrawDetections(IplImage* im_demo, const AggrDetectionResult& res, int res_i
 
 		CvPoint pt_text, pt_text_bg1, pt_text_bg2;
 		pt_text.x = left;
-		pt_text.y = base_y - 5 * draw_k;
+		pt_text.y = static_cast<int>(base_y - 5 * draw_k);
 		pt_text_bg1.x = left;
 		pt_text_bg1.y = base_y - rect_h;
 		pt_text_bg2.x = right;
@@ -539,7 +622,7 @@ double ResultQuality(const DetectionResult& res)
 
 double ResultLineQuality(const DetectionResult& res, int line, int line_template_lenght)
 {
-	double q = (res.classes[line].size() == line_template_lenght) ? 1000. : 0;
+	double q = (res.probs[line].size() == line_template_lenght) ? 1000. : 0;
 	for (int j = 0; j < res.probs[line].size(); ++j)
 		q += res.probs[line][j];
 	return q;
@@ -547,27 +630,7 @@ double ResultLineQuality(const DetectionResult& res, int line, int line_template
 
 double ResultsDistance(const DetectionResult& res1, const DetectionResult& res2)
 {
-	double d = 0;
-	const int lines_count_to_check = kCheckLastLineValidity ? 3 : 2;
-	for (int i = 0; i < lines_count_to_check; ++i) {
-		double d1 = 0; // l->r
-		double d2 = 0; // r->l
-		for (size_t j = 0; j < std::max(res1.classes[i].size(), res2.classes[i].size()); ++j)
-		{
-			if (j >= res1.classes[i].size() || j >= res2.classes[i].size()) {
-				d1 += 1.;
-				d2 += 1.;
-			}
-			else {
-				if (res1.classes[i][j] != res2.classes[i][j])
-					d1 += 1.; // TODO учитывать вероятности, учитывать пропуски
-				if (res1.classes[i][res1.classes[i].size() - j - 1] != res2.classes[i][res2.classes[i].size() - j -1])
-					d2 += 1.; // TODO учитывать вероятности, учитывать пропуски
-			}
-		}
-		d += std::min(d1, d2);
-	}
-	return d;
+	return static_cast<double>(levenshtein_distance(res1.strings[0], res2.strings[0]) + levenshtein_distance(res1.strings[2], res2.strings[2]));
 }
 
 BarcodesDecoder::SavedResultsVect::iterator BarcodesDecoder::FindBestFit(box bbox, const DetectionResult& res)
@@ -610,6 +673,19 @@ void BarcodesDecoder::UpdateFit(SavedResultsVect::iterator fit, box bbox, const 
 	}
 }
 
+
+void UpdateFromDict(const CheckDictionary::FindRes& dict_res, DetectionResult& res)
+{
+	res.strings[0] = dict_res.s0;
+	res.strings[1] = dict_res.s0.substr(3, 3);
+	res.strings[2] = dict_res.s2;
+	for (int i = 0; i < 3; ++i)
+	{
+		res.probs[i].clear();
+		res.probs[i].resize(res.strings[i].size(), 1.f);
+	}
+	res.is_good = true;
+}
 
 
 void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im_demo)
@@ -673,6 +749,9 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 
 		DetectionResult res1 = FindGroupsByRansac(selected_detections1, selected_detections_num1, names_);
 
+		auto dict_fit = dict_.FindBestFit(res1.strings[0], res1.strings[2]);
+		printf("1111111111111111111111111111111111111 %zd %zd %s %s\n", dict_fit.d, dict_fit.next_d, dict_fit.s0.c_str(), dict_fit.s2.c_str());
+
 		if (res1.is_good) // найдено хоть какое-то вразумительное соответствие по 1й попытке поворота
 		{
 			if (demo_images_ & 2)
@@ -708,6 +787,12 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 
 			DetectionResult res2 = FindGroupsByRansac(selected_detections2, selected_detections_num2, names_);
 			res2 = ImproveResult(res2);
+			auto dict_fit = dict_.FindBestFit(res2.strings[0], res2.strings[2]);
+			printf("2222222222222222222222222222222222222 %zd %zd %s %s\n", dict_fit.d, dict_fit.next_d, dict_fit.s0.c_str(), dict_fit.s2.c_str());
+			if (dict_fit.d <= kResultDistThr || dict_fit.d + kResultDistThr < dict_fit.next_d)
+			{
+				UpdateFromDict(dict_fit, res2);
+			}
 
 			if (demo_images_)
 				if (res2.is_good)
@@ -795,7 +880,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 	// Удаляем, что не нашло пары и отжило свой век
 	for (auto it = saved_results_.begin(); it != saved_results_.end(); )
 	{
-		if (it->second.lifetime > -kMaxLifetime)
+		if (it->second.lifetime >= -kMaxLifetime)
 			++it;
 		else
 			it = saved_results_.erase(it);
