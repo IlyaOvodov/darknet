@@ -30,11 +30,20 @@ extern "C" {
 #include "levenstein.hpp"
 #endif
 
+#ifdef WIN32
+#include <windows.h>
+#undef max
+#undef min
+#endif
+
+
 using std::string;
 using std::vector;
 
 // Hardcoded constants
 std::string kOutRoot = "D:\\Programming\\BarcodesDemoDump\\";
+
+std::string kSoundFile = "C:\\Windows\\media\\Speech On.wav";
 
 const size_t kDictionaryFitThr = 8;
 
@@ -806,12 +815,21 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 				auto saved_it = FindBestFit(sdets[idet].det->bbox, res2);
 				if (saved_it != saved_results_.end())
 				{
+					bool prev_good = CheckResultValidity(saved_it->second.aggr, kCheckLastLineValidity);
 					UpdateFit(saved_it, sdets[idet].det->bbox, res2);
+#ifdef WIN32
+					if (!prev_good && CheckResultValidity(saved_it->second.aggr, kCheckLastLineValidity))
+						PlaySound(kSoundFile.c_str(), GetModuleHandle(NULL), SND_FILENAME | SND_ASYNC);
+#endif
 				}
 				else
 				{
 					AggrDetectionResult r(res2);
 					saved_results_.push_back(std::make_pair(sdets[idet].det->bbox, r));
+#ifdef WIN32
+					if (CheckResultValidity(r.aggr, kCheckLastLineValidity))
+						PlaySound(kSoundFile.c_str(), GetModuleHandle(NULL), SND_FILENAME | SND_ASYNC);
+#endif
 				}
 
 				if (0) { // сохранение картинок для обученияч
