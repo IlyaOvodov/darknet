@@ -758,8 +758,8 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 
 		DetectionResult res1 = FindGroupsByRansac(selected_detections1, selected_detections_num1, names_);
 
-		auto dict_fit = dict_.FindBestFit(res1.strings[0], res1.strings[2]);
-		printf("1111111111111111111111111111111111111 %zd %zd %s %s\n", dict_fit.d, dict_fit.next_d, dict_fit.s0.c_str(), dict_fit.s2.c_str());
+		//auto dict_fit = dict_.FindBestFit(res1.strings[0], res1.strings[2]);
+		//printf("1111111111111111111111111111111111111 %zd %zd %s %s\n", dict_fit.d, dict_fit.next_d, dict_fit.s0.c_str(), dict_fit.s2.c_str());
 
 		if (res1.is_good) // найдено хоть какое-то вразумительное соответствие по 1й попытке поворота
 		{
@@ -797,7 +797,7 @@ void BarcodesDecoder::DetectBarcodes(image im_small, image im_full, IplImage* im
 			DetectionResult res2 = FindGroupsByRansac(selected_detections2, selected_detections_num2, names_);
 			res2 = ImproveResult(res2);
 			auto dict_fit = dict_.FindBestFit(res2.strings[0], res2.strings[2]);
-			printf("2222222222222222222222222222222222222 %zd %zd %s %s\n", dict_fit.d, dict_fit.next_d, dict_fit.s0.c_str(), dict_fit.s2.c_str());
+			//printf("2222222222222222222222222222222222222 %zd %zd %s %s\n", dict_fit.d, dict_fit.next_d, dict_fit.s0.c_str(), dict_fit.s2.c_str());
 			if (dict_fit.d <= kResultDistThr || dict_fit.d + kResultDistThr < dict_fit.next_d)
 			{
 				UpdateFromDict(dict_fit, res2);
