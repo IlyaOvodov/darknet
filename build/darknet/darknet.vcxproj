@@ -215,6 +215,7 @@
     <ClInclude Include="..\..\src\im2col.h" />
     <ClInclude Include="..\..\src\image.h" />
     <ClInclude Include="..\..\src\layer.h" />
+    <ClInclude Include="..\..\src\levenstein.hpp" />
     <ClInclude Include="..\..\src\list.h" />
     <ClInclude Include="..\..\src\local_layer.h" />
     <ClInclude Include="..\..\src\matrix.h" />
