@@ -108,6 +108,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     args.exposure = net.exposure;
     args.saturation = net.saturation;
     args.hue = net.hue;
+	args.blur_kernel = net.blur_kernel;
 
 #ifdef OPENCV
 	args.threads = 3 * ngpus;

@@ -713,7 +713,7 @@ data load_data_swag(char **paths, int n, int classes, float jitter)
 
 #include "http_stream.h"
 
-data load_data_detection(int n, char **paths, int m, int w, int h, int c, int boxes, int classes, int use_flip, float jitter, float hue, float saturation, float exposure, int small_object)
+data load_data_detection(int n, char **paths, int m, int w, int h, int c, int boxes, int classes, int use_flip, float jitter, float hue, float saturation, float exposure, int small_object, int blur_kernel)
 {
     c = c ? c : 3;
     char **random_paths = get_random_paths(paths, n, m);
@@ -740,6 +740,17 @@ data load_data_detection(int n, char **paths, int m, int w, int h, int c, int bo
 			continue;
 			//exit(0);
 		}
+
+		if (blur_kernel > 0) {
+			int k = rand_uniform_strong(0, blur_kernel);
+			if (k > 0) {
+				//IplImage blurred;
+				cvSmooth(src, src, CV_BLUR, k, k, 0, 0);
+				//cvReleaseImage(src);
+				//src = blurred;
+			}
+		}
+
 
 		int oh = src->height;
 		int ow = src->width;
@@ -781,7 +792,7 @@ data load_data_detection(int n, char **paths, int m, int w, int h, int c, int bo
     return d;
 }
 #else	// OPENCV
-data load_data_detection(int n, char **paths, int m, int w, int h, int c, int boxes, int classes, int use_flip, float jitter, float hue, float saturation, float exposure, int small_object)
+data load_data_detection(int n, char **paths, int m, int w, int h, int c, int boxes, int classes, int use_flip, float jitter, float hue, float saturation, float exposure, int small_object, int blur_kernel)
 {
     c = c ? c : 3;
 	char **random_paths = get_random_paths(paths, n, m);
@@ -855,7 +866,7 @@ void *load_thread(void *ptr)
     } else if (a.type == REGION_DATA){
         *a.d = load_data_region(a.n, a.paths, a.m, a.w, a.h, a.num_boxes, a.classes, a.jitter, a.hue, a.saturation, a.exposure);
     } else if (a.type == DETECTION_DATA){
-        *a.d = load_data_detection(a.n, a.paths, a.m, a.w, a.h, a.c, a.num_boxes, a.classes, a.flip, a.jitter, a.hue, a.saturation, a.exposure, a.small_object);
+        *a.d = load_data_detection(a.n, a.paths, a.m, a.w, a.h, a.c, a.num_boxes, a.classes, a.flip, a.jitter, a.hue, a.saturation, a.exposure, a.small_object, a.blur_kernel);
     } else if (a.type == SWAG_DATA){
         *a.d = load_data_swag(a.paths, a.n, a.classes, a.jitter);
     } else if (a.type == COMPARE_DATA){

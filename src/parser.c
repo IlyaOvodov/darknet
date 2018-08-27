@@ -641,6 +641,7 @@ void parse_net_options(list *options, network *net)
     net->exposure = option_find_float_quiet(options, "exposure", 1);
     net->hue = option_find_float_quiet(options, "hue", 0);
 	net->power = option_find_float_quiet(options, "power", 4);
+	net->blur_kernel = option_find_float_quiet(options, "blur_kernel", 0);
 
     if(!net->inputs && !(net->h && net->w && net->c)) error("No input parameters supplied");
 
