@@ -220,7 +220,7 @@ void send_mjpeg(IplImage* ipl, int port, int timeout, int quality) {
 }
 // ----------------------------------------
 
-CvCapture* get_capture_video_stream(char *path) {
+CvCapture* get_capture_video_stream(const char *path) {
 	CvCapture* cap = NULL;
 	try {
 		cap = (CvCapture*)new cv::VideoCapture(path);

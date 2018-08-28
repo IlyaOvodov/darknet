@@ -90,6 +90,7 @@ void *fetch_in_thread(void *ptr)
         //error("Stream closed.");
 		printf("Stream closed.\n");
 		flag_exit = 1;
+		exit(-1);
 		return EXIT_FAILURE;
     }
     //in_s = resize_image(in, net.w, net.h);
@@ -102,7 +103,7 @@ void *fetch_in_thread(void *ptr)
 image get_image_from_stream_continuous(void* context, int w, int h, int c, IplImage** in_img)
 {
 	c = c ? c : 3;
-	IplImage* got_img = GetImage(context);
+	IplImage* got_img = ThreadCaptureGetImage(context);
 	if (!got_img) {
 		return make_empty_image(0, 0, 0);
 	}
@@ -155,7 +156,7 @@ void *fetch_in_thread_continuous(void *ptr)
 
 void *detect_in_thread(void *ptr)
 {
-    float nms = .45;	// 0.4F
+    float nms = .45f;	// 0.4F
 
     layer l = net.layers[net.n-1];
     float *X = det_s.data;
@@ -251,6 +252,39 @@ void *detect_in_thread_bar(void *ptr)
 }
 
 
+CvCapture * open_cap(int cam_index, const char *filename)
+{
+	CvCapture * cap = 0;
+	if (filename) {
+		printf("video file: %s\n", filename);
+		//#ifdef CV_VERSION_EPOCH	// OpenCV 2.x
+		//		cap = cvCaptureFromFile(filename);
+		//#else					// OpenCV 3.x
+		cpp_video_capture = 1;
+		cap = get_capture_video_stream(filename);
+		//#endif
+	}
+	else {
+		printf("Webcam index: %d\n", cam_index);
+		//#ifdef CV_VERSION_EPOCH	// OpenCV 2.x
+		//        cap = cvCaptureFromCAM(cam_index);
+		//#else					// OpenCV 3.x
+		cpp_video_capture = 1;
+		cap = get_capture_webcam(cam_index);
+		//#endif
+	}
+
+	if (!cap) {
+#ifdef WIN32
+		printf("Check that you have copied file opencv_ffmpeg340_64.dll to the same directory where is darknet.exe \n");
+#endif
+		error("Couldn't connect to webcam.\n");
+		exit(1);
+	}
+	return cap;
+}
+
+
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes,
 	int frame_skip, char *prefix, char *out_filename, int http_stream_port, int dont_show, int ext_output)
 {
@@ -271,30 +305,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 	fuse_conv_batchnorm(net);
     srand(2222222);
 
-    if(filename){
-        printf("video file: %s\n", filename);
-//#ifdef CV_VERSION_EPOCH	// OpenCV 2.x
-//		cap = cvCaptureFromFile(filename);
-//#else					// OpenCV 3.x
-		cpp_video_capture = 1;
-		cap = get_capture_video_stream(filename);
-//#endif
-    }else{
-		printf("Webcam index: %d\n", cam_index);
-//#ifdef CV_VERSION_EPOCH	// OpenCV 2.x
-//        cap = cvCaptureFromCAM(cam_index);
-//#else					// OpenCV 3.x
-		cpp_video_capture = 1;
-		cap = get_capture_webcam(cam_index);
-//#endif
-    }
-
-	if (!cap) {
-#ifdef WIN32
-		printf("Check that you have copied file opencv_ffmpeg340_64.dll to the same directory where is darknet.exe \n");
-#endif
-		error("Couldn't connect to webcam.\n");
-	}
+	cap = open_cap(cam_index, filename);
 
     layer l = net.layers[net.n-1];
     int j;
@@ -486,31 +497,7 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 
 	srand(2222222);
 
-	if (filename) {
-		printf("video file: %s\n", filename);
-		//#ifdef CV_VERSION_EPOCH	// OpenCV 2.x
-		//		cap = cvCaptureFromFile(filename);
-		//#else					// OpenCV 3.x
-		cpp_video_capture = 1;
-		cap = get_capture_video_stream(filename);
-		//#endif
-	}
-	else {
-		printf("Webcam index: %d\n", cam_index);
-		//#ifdef CV_VERSION_EPOCH	// OpenCV 2.x
-		//        cap = cvCaptureFromCAM(cam_index);
-		//#else					// OpenCV 3.x
-		cpp_video_capture = 1;
-		cap = get_capture_webcam(cam_index);
-		//#endif
-	}
-
-	if (!cap) {
-#ifdef WIN32
-		printf("Check that you have copied file opencv_ffmpeg340_64.dll to the same directory where is darknet.exe \n");
-#endif
-		error("Couldn't connect to webcam.\n");
-	}
+	cap = open_cap(cam_index, filename);
 
 	int j;
 
@@ -573,7 +560,7 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 	if (read_in_thread && continuous_read) {
 		in_s.data = 0; // to enable continuous read
 		in_img = 0;
-		context = CreateTreadCaptureContext(cap);
+		context = ThreadCaptureCreate(cap);
 		if (pthread_create(&fetch_thread, 0, fetch_in_thread_continuous, context))
 			error("Thread creation failed");
 	}
@@ -583,6 +570,13 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 			if (!continuous_read)
 				if (pthread_create(&fetch_thread, 0, fetch_in_thread, 0)) error("Thread creation failed");
 			if (pthread_create(&detect_thread, 0, detect_in_thread_bar, 0)) error("Thread creation failed");
+
+			if (context && ThreadCaptureNeedsReset(context)) {
+				ThreadCaptureClear(context);
+				cvReleaseCapture(&cap);
+				cap = open_cap(cam_index, filename);
+				ThreadCaptureInit(context, cap);
+			}
 
 			if (!prefix) {
 				if (!dont_show) {
@@ -677,6 +671,9 @@ void demobar(char *datacfg, char *cfgfile, char *weightfile, const char *filenam
 	}
 
 	// free memory
+	if (context)
+		ThreadCaptureRelease(context);
+
 	pthread_mutex_destroy(&in_s_mutex);
 	cvReleaseImage(&show_img);
 	cvReleaseImage(&in_img);
