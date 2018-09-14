@@ -32,24 +32,24 @@ void check_cuda(cudaError_t status) {
 #endif
 
 struct detector_gpu_t {
-	network net;
-	image images[FRAMES];
-	float *avg;
-	float *predictions[FRAMES];
-	int demo_index;
-	unsigned int *track_id;
+    network net;
+    image images[FRAMES];
+    float *avg;
+    float *predictions[FRAMES];
+    int demo_index;
+    unsigned int *track_id;
 };
 
 YOLODLL_API Detector::Detector(std::string cfg_filename, std::string weight_filename, int &net_classes, int gpu_id) : cur_gpu_id(gpu_id)
 {
-	wait_stream = 0;
-	int old_gpu_index;
+    wait_stream = 0;
+    int old_gpu_index;
 #ifdef GPU
-	check_cuda( cudaGetDevice(&old_gpu_index) );
+    check_cuda( cudaGetDevice(&old_gpu_index) );
 #endif
 
-	detector_gpu_ptr = std::make_shared<detector_gpu_t>();
-	detector_gpu_t &detector_gpu = *static_cast<detector_gpu_t *>(detector_gpu_ptr.get());
+    detector_gpu_ptr = std::make_shared<detector_gpu_t>();
+    detector_gpu_t &detector_gpu = *static_cast<detector_gpu_t *>(detector_gpu_ptr.get());
 
 #ifdef GPU
 	//check_cuda( cudaSetDevice(cur_gpu_id) );
@@ -67,17 +67,17 @@ YOLODLL_API Detector::Detector(std::string cfg_filename, std::string weight_file
 	if (weightfile) {
 		load_weights(&net, weightfile);
 	}
-	set_batch_network(&net, 1);
-	net.gpu_index = cur_gpu_id;
-	fuse_conv_batchnorm(net);
+    set_batch_network(&net, 1);
+    net.gpu_index = cur_gpu_id;
+    fuse_conv_batchnorm(net);
 
-	layer l = net.layers[net.n - 1];
-	net_classes = l.classes;
-	int j;
+    layer l = net.layers[net.n - 1];
+    net_classes = l.classes;
+    int j;
 
-	detector_gpu.avg = (float *)calloc(l.outputs, sizeof(float));
-	for (j = 0; j < FRAMES; ++j) detector_gpu.predictions[j] = (float *)calloc(l.outputs, sizeof(float));
-	for (j = 0; j < FRAMES; ++j) detector_gpu.images[j] = make_image(1, 1, 3);
+    detector_gpu.avg = (float *)calloc(l.outputs, sizeof(float));
+    for (j = 0; j < FRAMES; ++j) detector_gpu.predictions[j] = (float *)calloc(l.outputs, sizeof(float));
+    for (j = 0; j < FRAMES; ++j) detector_gpu.images[j] = make_image(1, 1, 3);
 
 	detector_gpu.track_id = (unsigned int *)calloc(l.classes, sizeof(unsigned int));
 	for (j = 0; j < l.classes; ++j) detector_gpu.track_id[j] = 1;
@@ -117,21 +117,21 @@ YOLODLL_API int Detector::get_net_width() const {
 	return detector_gpu.net.w;
 }
 YOLODLL_API int Detector::get_net_height() const {
-	detector_gpu_t &detector_gpu = *static_cast<detector_gpu_t *>(detector_gpu_ptr.get());
-	return detector_gpu.net.h;
+    detector_gpu_t &detector_gpu = *static_cast<detector_gpu_t *>(detector_gpu_ptr.get());
+    return detector_gpu.net.h;
 }
 YOLODLL_API int Detector::get_net_color_depth() const {
-	detector_gpu_t &detector_gpu = *static_cast<detector_gpu_t *>(detector_gpu_ptr.get());
-	return detector_gpu.net.c;
+    detector_gpu_t &detector_gpu = *static_cast<detector_gpu_t *>(detector_gpu_ptr.get());
+    return detector_gpu.net.c;
 }
 
 
 YOLODLL_API std::vector<bbox_t> Detector::detect(std::string image_filename, float thresh, bool use_mean)
 {
-	std::vector<float> copy_probs;
-	std::shared_ptr<image_t> image_ptr(new image_t, [](image_t *img) { if (img->data) free(img->data); delete img; });
-	*image_ptr = load_image(image_filename);
-	return detect(*image_ptr, copy_probs, thresh, use_mean);
+    std::vector<float> copy_probs;
+    std::shared_ptr<image_t> image_ptr(new image_t, [](image_t *img) { if (img->data) free(img->data); delete img; });
+    *image_ptr = load_image(image_filename);
+    return detect(*image_ptr, copy_probs, thresh, use_mean);
 }
 
 static image load_image_stb(char *filename, int channels)
@@ -215,21 +215,21 @@ YOLODLL_API std::vector<bbox_t> Detector::detect(image_t img, std::vector<float>
 
 	float *prediction = network_predict(net, X);
 
-	if (use_mean) {
-		memcpy(detector_gpu.predictions[detector_gpu.demo_index], prediction, l.outputs * sizeof(float));
-		mean_arrays(detector_gpu.predictions, FRAMES, l.outputs, detector_gpu.avg);
-		l.output = detector_gpu.avg;
-		detector_gpu.demo_index = (detector_gpu.demo_index + 1) % FRAMES;
-	}
-	//get_region_boxes(l, 1, 1, thresh, detector_gpu.probs, 0, detector_gpu.boxes, 0);
-	//if (nms) do_nms_sort(detector_gpu.boxes, detector_gpu.probs, l.w*l.h*l.n, l.classes, nms);
+    if (use_mean) {
+        memcpy(detector_gpu.predictions[detector_gpu.demo_index], prediction, l.outputs * sizeof(float));
+        mean_arrays(detector_gpu.predictions, FRAMES, l.outputs, detector_gpu.avg);
+        l.output = detector_gpu.avg;
+        detector_gpu.demo_index = (detector_gpu.demo_index + 1) % FRAMES;
+    }
+    //get_region_boxes(l, 1, 1, thresh, detector_gpu.probs, 0, detector_gpu.boxes, 0);
+    //if (nms) do_nms_sort(detector_gpu.boxes, detector_gpu.probs, l.w*l.h*l.n, l.classes, nms);
 
-	int nboxes = 0;
-	int letterbox = 0;
-	float hier_thresh = 0.5;
-	copy_probs.clear();
-	detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
-	if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
+    int nboxes = 0;
+    int letterbox = 0;
+    float hier_thresh = 0.5;
+    copy_probs.clear();
+    detection *dets = get_network_boxes(&net, im.w, im.h, thresh, hier_thresh, 0, 1, &nboxes, letterbox);
+    if (nms) do_nms_sort(dets, nboxes, l.classes, nms);
 
 	std::vector<bbox_t> bbox_vec;
 
@@ -249,10 +249,10 @@ YOLODLL_API std::vector<bbox_t> Detector::detect(image_t img, std::vector<float>
 			bbox.prob = prob;
 			bbox.track_id = 0;
 
-			bbox_vec.push_back(bbox);
-			copy_probs.insert(copy_probs.end(), dets[i].prob_raw, dets[i].prob_raw + dets[i].classes);
-		}
-	}
+            bbox_vec.push_back(bbox);
+            copy_probs.insert(copy_probs.end(), dets[i].prob_raw, dets[i].prob_raw + dets[i].classes);
+        }
+    }
 
 	free_detections(dets, nboxes);
 	if(sized.data)

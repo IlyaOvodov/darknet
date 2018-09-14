@@ -33,19 +33,19 @@
 
 network *load_network_custom(char *cfg, char *weights, int clear, int batch)
 {
-	printf(" Try to load cfg: %s, weights: %s, clear = %d \n", cfg, weights, clear);
-	network *net = calloc(1, sizeof(network));
-	*net = parse_network_cfg_custom(cfg, batch);
-	if (weights && weights[0] != 0) {
-		load_weights(net, weights);
-	}
-	if (clear) (*net->seen) = 0;
-	return net;
+    printf(" Try to load cfg: %s, weights: %s, clear = %d \n", cfg, weights, clear);
+    network *net = calloc(1, sizeof(network));
+    *net = parse_network_cfg_custom(cfg, batch);
+    if (weights && weights[0] != 0) {
+        load_weights(net, weights);
+    }
+    if (clear) (*net->seen) = 0;
+    return net;
 }
 
 network *load_network(char *cfg, char *weights, int clear)
 {
-	return load_network_custom(cfg, weights, clear, 0);
+    return load_network_custom(cfg, weights, clear, 0);
 }
 
 int get_current_batch(network net)
@@ -182,10 +182,10 @@ network make_network(int n)
     net.input_gpu = calloc(1, sizeof(float *));
     net.truth_gpu = calloc(1, sizeof(float *));
 
-	net.input16_gpu = calloc(1, sizeof(float *));
-	net.output16_gpu = calloc(1, sizeof(float *));
-	net.max_input16_size = calloc(1, sizeof(size_t));
-	net.max_output16_size = calloc(1, sizeof(size_t));
+    net.input16_gpu = calloc(1, sizeof(float *));
+    net.output16_gpu = calloc(1, sizeof(float *));
+    net.max_input16_size = calloc(1, sizeof(size_t));
+    net.max_output16_size = calloc(1, sizeof(size_t));
 #endif
     return net;
 }
@@ -580,31 +580,31 @@ detection *make_network_boxes(network *net, float thresh, int *num)
 
 void custom_get_region_detections(layer l, int w, int h, int net_w, int net_h, float thresh, int *map, float hier, int relative, detection *dets, int letter)
 {
-	box *boxes = calloc(l.w*l.h*l.n, sizeof(box));
-	float **probs = calloc(l.w*l.h*l.n, sizeof(float *));
-	float **probs_raw = calloc(l.w*l.h*l.n, sizeof(float *));
-	int i, j;
-	for (j = 0; j < l.w*l.h*l.n; ++j) {
-		probs[j] = calloc(l.classes, sizeof(float));
-		probs_raw[j] = calloc(l.classes, sizeof(float));
-	}
-	get_region_boxes(l, 1, 1, thresh, probs, probs_raw, boxes, 0, map);
-	for (j = 0; j < l.w*l.h*l.n; ++j) {
-		dets[j].classes = l.classes;
-		dets[j].bbox = boxes[j];
-		dets[j].objectness = 1;
-		for (i = 0; i < l.classes; ++i) {
-			dets[j].prob[i] = probs[j][i];
-			dets[j].prob_raw[i] = probs_raw[j][i];
-		}
-	}
+    box *boxes = calloc(l.w*l.h*l.n, sizeof(box));
+    float **probs = calloc(l.w*l.h*l.n, sizeof(float *));
+    float **probs_raw = calloc(l.w*l.h*l.n, sizeof(float *));
+    int i, j;
+    for (j = 0; j < l.w*l.h*l.n; ++j) {
+        probs[j] = calloc(l.classes, sizeof(float));
+        probs_raw[j] = calloc(l.classes, sizeof(float));
+    }
+    get_region_boxes(l, 1, 1, thresh, probs, probs_raw, boxes, 0, map);
+    for (j = 0; j < l.w*l.h*l.n; ++j) {
+        dets[j].classes = l.classes;
+        dets[j].bbox = boxes[j];
+        dets[j].objectness = 1;
+        for (i = 0; i < l.classes; ++i) {
+            dets[j].prob[i] = probs[j][i];
+            dets[j].prob_raw[i] = probs_raw[j][i];
+        }
+    }
 
-	free(boxes);
-	free_ptrs((void **)probs, l.w*l.h*l.n);
-	free_ptrs((void **)probs_raw, l.w*l.h*l.n);
+    free(boxes);
+    free_ptrs((void **)probs, l.w*l.h*l.n);
+    free_ptrs((void **)probs_raw, l.w*l.h*l.n);
 
-	//correct_region_boxes(dets, l.w*l.h*l.n, w, h, net_w, net_h, relative);
-	correct_yolo_boxes(dets, l.w*l.h*l.n, w, h, net_w, net_h, relative, letter);
+    //correct_region_boxes(dets, l.w*l.h*l.n, w, h, net_w, net_h, relative);
+    correct_yolo_boxes(dets, l.w*l.h*l.n, w, h, net_w, net_h, relative, letter);
 }
 
 void fill_network_boxes(network *net, int w, int h, float thresh, float hier, int *map, int relative, detection *dets, int letter)
@@ -637,13 +637,13 @@ detection *get_network_boxes(network *net, int w, int h, float thresh, float hie
 
 void free_detections(detection *dets, int n)
 {
-	int i;
-	for (i = 0; i < n; ++i) {
-		free(dets[i].prob);
-		free(dets[i].prob_raw);
-		if (dets[i].mask) free(dets[i].mask);
-	}
-	free(dets);
+    int i;
+    for (i = 0; i < n; ++i) {
+        free(dets[i].prob);
+        free(dets[i].prob_raw);
+        if (dets[i].mask) free(dets[i].mask);
+    }
+    free(dets);
 }
 
 float *network_predict_image(network *net, image im)
