@@ -29,8 +29,8 @@ OS := $(shell uname)
 # GP100/Tesla P100 – DGX-1
 # ARCH= -gencode arch=compute_60,code=sm_60
 
-# For Jetson Tx1 uncomment:
-# ARCH= -gencode arch=compute_51,code=[sm_51,compute_51]
+# For Jetson TX1, Tegra X1, DRIVE CX, DRIVE PX - uncomment:
+# ARCH= -gencode arch=compute_53,code=[sm_53,compute_53]
 
 # For Jetson Tx2 or Drive-PX2 uncomment:
 # ARCH= -gencode arch=compute_62,code=[sm_62,compute_62]
@@ -57,7 +57,7 @@ ifeq ($(DEBUG), 1)
 OPTS= -O0 -g
 else
 ifeq ($(AVX), 1) 
-CFLAGS+= -ffp-contract=fast -mavx -msse4.1 -msse4a
+CFLAGS+= -ffp-contract=fast -mavx -mavx2 -msse3 -msse4.1 -msse4.2 -msse4a
 endif
 endif
 
