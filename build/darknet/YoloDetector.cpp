@@ -70,15 +70,19 @@ public:
 	// \brief Выполняет обнаружение объектов на изображеннии с помощью нейронной сети Yolo 
 	virtual ErrorCode DetectObjects(const uint8_t* image, int width, int height, int bpl, int bpp, float threshold, bool use_mean)
 	{
-		if (bpp != m_detector_from_darknet->get_net_color_depth())
+		const int net_channels = m_detector_from_darknet->get_net_color_depth();
+		//ожидается, что число каналов во входном изображении будет такое же как заложено в нейросети.
+		//Единственное исключение - при подаче 4-х канальной картинки на вход 3-х канальной сети -
+        //она трактуется как BGRx и последний канал отбрасывается.
+		if (bpp != net_channels && !(bpp == 4 && net_channels == 3))
 		{
 			m_last_error = std::string("Incorrect color depth: image depth is ") + std::to_string(bpp)
-				+ ", net depth is " + std::to_string(m_detector_from_darknet->get_net_color_depth());
+				+ ", net depth is " + std::to_string(net_channels);
 			return kError;
 		}
 		try
 		{
-			m_input_image.resize(width*std::abs(height)*bpp);
+			m_input_image.resize(width*std::abs(height)*net_channels);
 			const int height_dir = height >= 0 ? -1 : +1;
 			height = std::abs(height);
 			const uint8_t* input_lines_ptr = height_dir > 0 ? image : image + bpl*(height - 1);
@@ -86,7 +90,7 @@ public:
 			for (int y = 0; y < height; ++y) {
 				for (int x = 0; x < width; ++x) {
 					float* output_lines_ptr = &m_input_image[(x + width*y)];
-					for (int c = bpp-1; c >= 0; --c) {
+					for (int c = net_channels - 1; c >= 0; --c) {
 						*output_lines_ptr = static_cast<float>(input_lines_ptr[x*bpp + c]) / 255.f;
 						output_lines_ptr += height*width;
 					}
@@ -95,7 +99,7 @@ public:
 			}
 
 			image_t temp_image = {};
-			temp_image.c = bpp;
+			temp_image.c = net_channels;
 			temp_image.data = m_input_image.data();
 			temp_image.h = height;
 			temp_image.w = width;
