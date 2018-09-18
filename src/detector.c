@@ -523,6 +523,8 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
     //set_batch_network(&net, 1);
     fuse_conv_batchnorm(net);
     srand(time(0));
+	double total_time_nn = 0;
+	double total_time_all = 0;
 
     //list *plist = get_paths("data/coco_val_5k.list");
     list *options = read_data_cfg(datacfg);
@@ -556,13 +558,16 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
         image orig = load_image(path, 0, 0, net.c);
         image sized = resize_image(orig, net.w, net.h);
         char *id = basecfg(path);
+		clock_t time_start = clock();
         network_predict(net, sized.data);
-        int nboxes = 0;
+		total_time_nn += clock() - time_start;
+		int nboxes = 0;
         int letterbox = 0;
         detection *dets = get_network_boxes(&net, sized.w, sized.h, thresh, .5, 0, 1, &nboxes, letterbox);
         if (nms) do_nms_obj(dets, nboxes, 1, nms);
         int selected_detections_num;
         detection_with_class* selected_detections = get_actual_detections(dets, nboxes, -1 /*no threshould*/, &selected_detections_num);
+		total_time_all += clock() - time_start;
 
         char labelpath[4096];
         replace_image_to_label(path, labelpath);
@@ -668,7 +673,11 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile, fl
                 proposals_avg_iou_class * 100 / proposals, 100.*correct_class / proposals,
                 proposals_avg_iou_class * 100 / proposals_class, 100.*correct_class / proposals_class
                 );
-            }
+				fprintf(stderr, "Total time (%d samples) %fs (NN:%f, NMS:%f). Per image: %fms (NN:%f, NMS:%f)",
+					m, total_time_all / CLOCKS_PER_SEC, total_time_nn / CLOCKS_PER_SEC, (total_time_all - total_time_nn) / CLOCKS_PER_SEC,
+					total_time_all * 1000 / CLOCKS_PER_SEC / m, total_time_nn * 1000 / CLOCKS_PER_SEC / m, (total_time_all - total_time_nn) * 1000 / CLOCKS_PER_SEC / m
+				);
+			}
         }
         else
         {
