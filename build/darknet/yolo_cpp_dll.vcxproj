@@ -14,6 +14,7 @@
     <ProjectGuid>{4CF5694F-12A5-4012-8D94-9A0915E9FEB5}</ProjectGuid>
     <RootNamespace>darknet</RootNamespace>
     <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
+    <CudaToolkitCustomDir>$(CUDA_PATH)</CudaToolkitCustomDir>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup>
@@ -57,7 +58,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>..\..\3rdparty\include;%(AdditionalIncludeDirectories);$(CudaToolkitIncludeDir);$(cudnn)\include</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>CUDNN;GPU;YOLODLL_EXPORTS;_TIMESPEC_DEFINED;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_USRDLL;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(BuildTimeExtraCPPDefinitions);GPU;YOLODLL_EXPORTS;_TIMESPEC_DEFINED;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;WIN32;_DEBUG;_USRDLL;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <UndefinePreprocessorDefinitions>
       </UndefinePreprocessorDefinitions>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
@@ -73,7 +74,7 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <CudaCompile>
-      <CodeGeneration>compute_30,sm_30;compute_52,sm_52</CodeGeneration>
+      <CodeGeneration>$(BuildTimeCudaCapailities)compute_61,compute_61</CodeGeneration>
       <TargetMachinePlatform>64</TargetMachinePlatform>
       <AdditionalCompilerOptions>/Gy</AdditionalCompilerOptions>
     </CudaCompile>
@@ -86,7 +87,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(OpenCvRoot)\include;..\..\3rdparty\include;%(AdditionalIncludeDirectories);$(CudaToolkitIncludeDir);$(cudnn)\include</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>CUDNN;GPU;YOLODLL_EXPORTS;_TIMESPEC_DEFINED;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_USRDLL;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>$(BuildTimeExtraCPPDefinitions);GPU;YOLODLL_EXPORTS;_TIMESPEC_DEFINED;_SCL_SECURE_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;WIN32;NDEBUG;_USRDLL;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <CLanguageStandard>c11</CLanguageStandard>
       <CppLanguageStandard>c++1y</CppLanguageStandard>
       <PrecompiledHeaderCompileAs>CompileAsCpp</PrecompiledHeaderCompileAs>
@@ -106,7 +107,7 @@
     </Link>
     <CudaCompile>
       <TargetMachinePlatform>64</TargetMachinePlatform>
-      <CodeGeneration>compute_30,sm_30;compute_52,sm_52</CodeGeneration>
+      <CodeGeneration>$(BuildTimeCudaCapailities)compute_61,compute_61</CodeGeneration>
       <AdditionalCompilerOptions>/Gy</AdditionalCompilerOptions>
     </CudaCompile>
   </ItemDefinitionGroup>

@@ -182,8 +182,9 @@ __global__ void forward_crop_layer_kernel(float *input, float *rand, int size, i
 
 extern "C" void forward_crop_layer_gpu(crop_layer layer, network_state state)
 {
-    cuda_random(layer.rand_gpu, layer.batch*8);
-
+#ifndef DONT_SUPPORT_GPU_TRAIN
+	cuda_random(layer.rand_gpu, layer.batch*8);
+#endif
     float radians = layer.angle*3.14159265/180.;
 
     float scale = 2;

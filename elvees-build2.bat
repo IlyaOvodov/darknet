@@ -1,14 +1,16 @@
-@echo off
-
 :: (c) 2018 ELVEES NeoTek JSC. All rights reserved. 
 :: Скрипт используется для сборки библиотеки darknet(yolo) 
 
 if not defined VS140COMNTOOLS goto VS2015_not_installed
 if not defined THIRD_PARTY_BUILD_ROOT goto :Third_party_build_root_var_undefined
-call "%VS140COMNTOOLS%..\..\VC\vcvarsall.bat" x86
+set OUT_BRANCHNAME=%~dp0
+::remove trailing slash and all-except last path components from OUT_BRANCHNAME
+for %%d in (%OUT_BRANCHNAME:~0,-1%) do set OUT_BRANCHNAME=%%~nxd
+set BASE_OUTPUT_PATH=%THIRD_PARTY_BUILD_ROOT%\yolo\%OUT_BRANCHNAME%
+set BASE_INT_PATH=%THIRD_PARTY_BUILD_ROOT%\yolo\%OUT_BRANCHNAME%\build
+set CUDA_PATH=%~dp0\..\..\large\cuda\8.0.61.2\win
 
-set BASE_OUTPUT_PATH=%THIRD_PARTY_BUILD_ROOT%\yolo\20180226.master.490d025
-set BASE_INT_PATH=%THIRD_PARTY_BUILD_ROOT%\yolo\20180226.master.490d025\build
+call "%VS140COMNTOOLS%..\..\VC\vcvarsall.bat" x86
 
 call :build "Debug" "dll" "x64" || goto :build_failed
 call :build "Release" "dll" "x64" || goto :build_failed
@@ -24,8 +26,8 @@ goto :end
 :build
     set CONFIG=%~1
     set USEGPU=%~2
-	set PLATFORM=%~3
-    msbuild.exe build\darknet\yolo_cpp_%USEGPU%.sln /t:Rebuild /p:Configuration=%CONFIG% /p:Platform=%PLATFORM% /p:OutDir=%BASE_OUTPUT_PATH%\%USEGPU%_%CONFIG%_%PLATFORM%\ /p:IntDir=%BASE_INT_PATH%\%USEGPU%_%CONFIG%_%PLATFORM%\
+        set PLATFORM=%~3
+    msbuild.exe build\darknet\yolo_cpp_%USEGPU%.sln /t:Rebuild /p:BuildTimeExtraCPPDefinitions="DONT_SUPPORT_GPU_TRAIN;" /p:BuildTimeCudaCapailities="compute_20,compute_20;" /p:Configuration=%CONFIG% /p:Platform=%PLATFORM% /p:OutDir=%BASE_OUTPUT_PATH%\%USEGPU%_%CONFIG%_%PLATFORM%\ /p:IntDir=%BASE_INT_PATH%\%USEGPU%_%CONFIG%_%PLATFORM%\
     if not "0"=="%errorlevel%" exit /b "%errorlevel%"
 goto :EOF 
 
