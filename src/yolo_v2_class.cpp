@@ -27,7 +27,8 @@ static std::unique_ptr<Detector> detector;
 
 int init(const char *configurationFilename, const char *weightsFilename, int gpu) 
 {
-    detector.reset(new Detector(configurationFilename, weightsFilename, gpu));
+	int net_classes_unused = 0;
+	detector.reset(new Detector(configurationFilename, weightsFilename, net_classes_unused, gpu, 0, 0));
     return 1;
 }
 
@@ -100,7 +101,7 @@ struct detector_gpu_t {
     unsigned int *track_id;
 };
 
-YOLODLL_API Detector::Detector(std::string cfg_filename, std::string weight_filename, int &net_classes, int gpu_id) : cur_gpu_id(gpu_id)
+YOLODLL_API Detector::Detector(std::string cfg_filename, std::string weight_filename, int &net_classes, int gpu_id, int width_override, int height_override) : cur_gpu_id(gpu_id)
 {
     wait_stream = 0;
     int old_gpu_index;
@@ -123,8 +124,8 @@ YOLODLL_API Detector::Detector(std::string cfg_filename, std::string weight_file
     char *cfgfile = const_cast<char *>(cfg_filename.data());
     char *weightfile = const_cast<char *>(weight_filename.data());
 
-    net = parse_network_cfg_custom(cfgfile, 1);
-    if (weightfile) {
+    net = parse_network_cfg_custom_size(cfgfile, 1, width_override, height_override);
+    if (weightfile && weight_filename.size() > 0) {
         load_weights(&net, weightfile);
     }
     set_batch_network(&net, 1);

@@ -3,6 +3,7 @@
 #include "network.h"
 
 network parse_network_cfg(char *filename);
+network parse_network_cfg_custom_size(char *filename, int batch, int width_override, int height_override);
 network parse_network_cfg_custom(char *filename, int batch);
 void save_network(network net, char *filename);
 void save_weights(network net, char *filename);

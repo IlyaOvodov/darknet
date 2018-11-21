@@ -271,9 +271,8 @@ layer parse_yolo(list *options, size_params params)
     int max_boxes = option_find_int_quiet(options, "max", 90);
     layer l = make_yolo_layer(params.batch, params.w, params.h, num, total, mask, classes, max_boxes);
     if (l.outputs != params.inputs) {
-        printf("Error: l.outputs == params.inputs \n");
-        printf("filters= in the [convolutional]-layer doesn't correspond to classes= or mask= in [yolo]-layer \n");
-        exit(EXIT_FAILURE);
+		report_uncontinuable_error_throw("parse_yolo", "Error: l.outputs == params.inputs \n"
+        "filters= in the [convolutional]-layer doesn't correspond to classes= or mask= in [yolo]-layer \n");
     }
     //assert(l.outputs == params.inputs);
 
@@ -314,9 +313,8 @@ layer parse_region(list *options, size_params params)
 
     layer l = make_region_layer(params.batch, params.w, params.h, num, classes, coords, max_boxes);
     if (l.outputs != params.inputs) {
-        printf("Error: l.outputs == params.inputs \n");
-        printf("filters= in the [convolutional]-layer doesn't correspond to classes= or num= in [region]-layer \n");
-        exit(EXIT_FAILURE);
+		report_uncontinuable_error_throw("parse_region", "Error: l.outputs == params.inputs \n"
+        "filters= in the [convolutional]-layer doesn't correspond to classes= or num= in [region]-layer \n");
     }
     //assert(l.outputs == params.inputs);
 
@@ -701,6 +699,11 @@ network parse_network_cfg(char *filename)
 
 network parse_network_cfg_custom(char *filename, int batch)
 {
+	return parse_network_cfg_custom_size(filename, batch, 0, 0);
+}
+
+network parse_network_cfg_custom_size(char *filename, int batch, int width_override, int height_override)
+{
     list *sections = read_cfg(filename);
     node *n = sections->front;
     if(!n) error("Config file has no sections");
@@ -713,11 +716,14 @@ network parse_network_cfg_custom(char *filename, int batch)
     if(!is_network(s)) error("First section must be [net] or [network]");
     parse_net_options(options, &net);
 
-    params.h = net.h;
+	if (batch > 0) net.batch = batch;
+	if (width_override > 0) net.w = width_override;
+	if (height_override > 0) net.h = height_override;
+
+	params.h = net.h;
     params.w = net.w;
     params.c = net.c;
     params.inputs = net.inputs;
-    if (batch > 0) net.batch = batch;
     params.batch = net.batch;
     params.time_steps = net.time_steps;
     params.net = net;

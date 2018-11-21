@@ -273,21 +273,17 @@ void top_k(float *a, int n, int k, int *index)
 
 void error(const char *s)
 {
-    perror(s);
-    assert(0);
-    exit(EXIT_FAILURE);
+	report_uncontinuable_error_throw(s, "");
 }
 
 void malloc_error()
 {
-    fprintf(stderr, "Malloc error\n");
-    exit(EXIT_FAILURE);
+	report_uncontinuable_error_throw("Malloc failed", "");
 }
 
 void file_error(char *s)
 {
-    fprintf(stderr, "Couldn't open file: %s\n", s);
-    exit(EXIT_FAILURE);
+	report_uncontinuable_error_throw("Couldn't open file", s);
 }
 
 list *split_str(char *s, char delim)
