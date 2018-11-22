@@ -18,7 +18,9 @@ extern "C" {
 
 #include <vector>
 #include <iostream>
+#include <string>
 #include <algorithm>
+#include <stdexcept>
 
 #define FRAMES 3
 
@@ -107,6 +109,16 @@ YOLODLL_API Detector::Detector(std::string cfg_filename, std::string weight_file
     int old_gpu_index;
 #ifdef GPU
     check_cuda( cudaGetDevice(&old_gpu_index) );
+    cudaError_t gpu_try_init_status = cudaSetDevice(cur_gpu_id);
+    if (gpu_try_init_status != cudaSuccess)
+    {
+        std::string error_string = "Initial gpu access failed, gpu mode is not available:";
+        error_string += cudaGetErrorString(gpu_try_init_status);
+        std::cerr << error_string << std::endl;
+        //initialization failed, but since no non-exception-safe resources are allocated yet
+        //raise plain std::runtime_error instead of calling report_uncontinuable_error_throw
+        throw std::runtime_error(error_string);
+    }
 #endif
 
     detector_gpu_ptr = std::make_shared<detector_gpu_t>();
