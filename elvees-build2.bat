@@ -9,6 +9,7 @@ for %%d in (%OUT_BRANCHNAME:~0,-1%) do set OUT_BRANCHNAME=%%~nxd
 set BASE_OUTPUT_PATH=%THIRD_PARTY_BUILD_ROOT%\yolo\%OUT_BRANCHNAME%
 set BASE_INT_PATH=%THIRD_PARTY_BUILD_ROOT%\yolo\%OUT_BRANCHNAME%\build
 set CUDA_PATH=%~dp0\..\..\large\cuda\8.0.61.2\win
+set CUDA_MSBUILD_PREFIX=%CUDA_PATH%\VCTargets-BuildCustomizations\CUDA 8.0
 
 call "%VS140COMNTOOLS%..\..\VC\vcvarsall.bat" x86
 
