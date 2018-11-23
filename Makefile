@@ -119,12 +119,12 @@ CFLAGS+= -fPIC
 $(LIBNAMESO): $(OBJS) build/darknet/YoloDetector.h build/darknet/YoloDetector.cpp src/yolo_v2_class.hpp src/yolo_v2_class.cpp
 	$(CPP) -shared -std=c++11 -fvisibility=hidden -DYOLODLL_EXPORTS $(COMMON) $(CFLAGS) $(OBJS) build/darknet/YoloDetector.cpp src/yolo_v2_class.cpp -o $@ $(LDFLAGS)
 	
-$(APPNAMESO): $(LIBNAMESO) build/darknet/YoloDetector.h build/darknet/YoloDetector.cpp src/yolo_v2_class.hpp src/yolo_console_dll.cpp
+$(APPNAMESO): $(LIBNAMESO) build/darknet/YoloDetector.h build/darknet/YoloDetector.cpp src/yolo_v2_class.hpp src/yolo_v2_class.cpp src/yolo_console_dll.cpp
 	$(CPP) -std=c++11 $(COMMON) $(CFLAGS) -o $@ build/darknet/YoloDetector.cpp src/yolo_console_dll.cpp $(LDFLAGS) -L ./ -l:$(LIBNAMESO)
 endif
 
-$(EXEC): $(OBJS)
-	$(CPP) $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+$(EXEC): $(OBJS) build/darknet/YoloDetector.h build/darknet/YoloDetector.cpp src/yolo_v2_class.hpp  src/yolo_v2_class.cpp
+	$(CPP) -std=c++11 $(COMMON) $(CFLAGS) $^ -o $@ $(LDFLAGS)
 
 $(OBJDIR)%.o: %.c $(DEPS)
 	$(CC) $(COMMON) $(CFLAGS) -c $< -o $@
