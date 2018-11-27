@@ -2086,12 +2086,12 @@ void gemm_ongpu(int TA, int TB, int M, int N, int K, float ALPHA,
         float *A_gpu, int lda,
         float *B_gpu, int ldb,
         float BETA,
-        float *C_gpu, int ldc)
+        float *C_gpu, int ldc, void* cublas_handle)
 {
-    cublasHandle_t handle = blas_handle();
+    cublasHandle_t handle = cublas_handle;
     cudaError_t stream_status = cublasSetStream(handle, get_cuda_stream());
     cudaError_t status = cublasSgemm(handle, (TB ? CUBLAS_OP_T : CUBLAS_OP_N),
-            (TA ? CUBLAS_OP_T : CUBLAS_OP_N), N, M, K, &ALPHA, B_gpu, ldb, A_gpu, lda, &BETA, C_gpu, ldc);
+           (TA ? CUBLAS_OP_T : CUBLAS_OP_N), N, M, K, &ALPHA, B_gpu, ldb, A_gpu, lda, &BETA, C_gpu, ldc);
     check_error(status);
 }
 
@@ -2105,7 +2105,7 @@ void gemm_gpu(int TA, int TB, int M, int N, int K, float ALPHA,
     float *B_gpu = cuda_make_array(B, (TB ? ldb*N : ldb*K));
     float *C_gpu = cuda_make_array(C, ldc*M);
 
-    gemm_ongpu(TA, TB, M, N, K, ALPHA, A_gpu, lda, B_gpu, ldb, BETA, C_gpu, ldc);
+    gemm_ongpu(TA, TB, M, N, K, ALPHA, A_gpu, lda, B_gpu, ldb, BETA, C_gpu, ldc, blas_handle());
 
     cuda_pull_array(C_gpu, C, ldc*M);
     cuda_free(A_gpu);
@@ -2160,7 +2160,7 @@ void time_ongpu(int TA, int TB, int m, int k, int n)
     int i;
     clock_t start = clock(), end;
     for(i = 0; i<iter; ++i){
-        gemm_ongpu(TA,TB,m,n,k,1,a_cl,lda,b_cl,ldb,1,c_cl,n);
+        gemm_ongpu(TA,TB,m,n,k,1,a_cl,lda,b_cl,ldb,1,c_cl,n, blas_handle());
         cudaThreadSynchronize();
     }
     double flop = ((double)m)*n*(2.*k + 2.)*iter;

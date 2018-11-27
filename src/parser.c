@@ -823,6 +823,13 @@ network parse_network_cfg_custom_size(char *filename, int batch, int width_overr
         //printf("%ld\n", workspace_size);
 #ifdef GPU
         if(gpu_index >= 0){
+            cublasStatus_t cublas_init_result = cublasCreate(&net.cublas_handle);
+            if (cublas_init_result != CUBLAS_STATUS_SUCCESS)
+            {
+                char code_as_str[100] = { 0 };
+                sprintf(code_as_str,"%d", cublas_init_result);
+                report_uncontinuable_error_throw("cublasCreate failed", code_as_str);
+            }
             net.workspace = cuda_make_array(0, workspace_size/sizeof(float) + 1);
         }else {
             net.workspace = calloc(1, workspace_size);
