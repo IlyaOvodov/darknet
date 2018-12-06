@@ -31,7 +31,7 @@ extern "C" void forward_deconvolutional_layer_gpu(deconvolutional_layer layer, n
         float *b = state.input + i*layer.c*layer.h*layer.w;
         float *c = layer.col_image_gpu;
 
-        gemm_ongpu(1,0,m,n,k,1,a,m,b,n,0,c,n);
+        gemm_ongpu(1,0,m,n,k,1,a,m,b,n,0,c,n, state.net.cublas_handle);
 
         col2im_ongpu(c, layer.n, out_h, out_w, layer.size, layer.stride, 0, layer.output_gpu+i*layer.n*size);
     }
@@ -63,7 +63,7 @@ extern "C" void backward_deconvolutional_layer_gpu(deconvolutional_layer layer, 
 
         im2col_ongpu(layer.delta_gpu + i*layer.n*size, layer.n, out_h, out_w, 
                 layer.size, layer.stride, 0, b);
-        gemm_ongpu(0,1,m,n,k,alpha,a,k,b,k,1,c,n);
+        gemm_ongpu(0,1,m,n,k,alpha,a,k,b,k,1,c,n, state.net.cublas_handle);
 
         if(state.delta){
             int m = layer.c;

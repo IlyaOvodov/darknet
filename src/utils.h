@@ -84,6 +84,6 @@ unsigned int random_gen();
 float random_float();
 float rand_uniform_strong(float min, float max);
 int int_index(int *a, int val, int n);
-
+void report_uncontinuable_error_throw(const char* reason, const char* details);
 #endif
 

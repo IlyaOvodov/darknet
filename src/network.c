@@ -799,7 +799,12 @@ void free_network(network net)
     free(net.seen);
 
 #ifdef GPU
-    if (gpu_index >= 0) cuda_free(net.workspace);
+    if (gpu_index >= 0)
+    {
+        cublasDestroy(net.cublas_handle);
+        net.cublas_handle = NULL;
+        cuda_free(net.workspace);
+    }
     else free(net.workspace);
     if (*net.input_gpu) cuda_free(*net.input_gpu);
     if (*net.truth_gpu) cuda_free(*net.truth_gpu);

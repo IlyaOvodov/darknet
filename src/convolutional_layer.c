@@ -357,7 +357,11 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
         l.biases_gpu = cuda_make_array(l.biases, n);
         l.bias_updates_gpu = cuda_make_array(l.bias_updates, n);
 
-        l.delta_gpu = cuda_make_array(l.delta, l.batch*out_h*out_w*n);
+#ifndef DONT_SUPPORT_GPU_TRAIN
+		l.delta_gpu = cuda_make_array(l.delta, l.batch*out_h*out_w*n);
+#else
+		l.delta_gpu = NULL;//this quite huge gpu array is unused in forward-only usage
+#endif
         l.output_gpu = cuda_make_array(l.output, l.batch*out_h*out_w*n);
 
         if(binary){
@@ -382,7 +386,11 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
             l.scale_updates_gpu = cuda_make_array(l.scale_updates, n);
 
             l.x_gpu = cuda_make_array(l.output, l.batch*out_h*out_w*n);
-            l.x_norm_gpu = cuda_make_array(l.output, l.batch*out_h*out_w*n);
+#ifndef DONT_SUPPORT_GPU_TRAIN
+			l.x_norm_gpu = cuda_make_array(l.output, l.batch*out_h*out_w*n);
+#else
+			l.x_norm_gpu = NULL;//this quite huge gpu array is unused in forward-only usage
+#endif	
         }
 #ifdef CUDNN
         cudnnCreateTensorDescriptor(&l.normDstTensorDesc);

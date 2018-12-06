@@ -60,7 +60,7 @@ public:
     float nms = .4;
     bool wait_stream;
 
-    YOLODLL_API Detector(std::string cfg_filename, std::string weight_filename, int &net_classes, int gpu_id = 0);
+    YOLODLL_API Detector(std::string cfg_filename, std::string weight_filename, int &net_classes, int gpu_id, int width_override, int height_override);
     YOLODLL_API ~Detector();
 
     YOLODLL_API std::vector<bbox_t> detect(std::string image_filename, float thresh = 0.2, bool use_mean = false);

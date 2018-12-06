@@ -18,7 +18,9 @@ void forward_dropout_layer_gpu(dropout_layer layer, network_state state)
 {
     if (!state.train) return;
     int size = layer.inputs*layer.batch;
-    cuda_random(layer.rand_gpu, size);
+#ifndef DONT_SUPPORT_GPU_TRAIN
+	cuda_random(layer.rand_gpu, size);
+#endif
     /*
     int i;
     for(i = 0; i < size; ++i){

@@ -33,6 +33,9 @@ namespace yolo_detector
 * Коды ошибок, возникающие при использовании функций детектирования объектов с помощью Yolo
 */
 enum ErrorCode {
+	//Возникла критическая ошибка, в библиотеке возможны утечки несовместимые с продолжением работы (массовые утечки памяти, ресурсов cuda и т.д.)
+	//Корректное освобождение ресурсов невозможно. Предполагается, что вызывающая сторона после записи ошибки в лог вызовет std::quick_exit()
+	kCriticalErrorCantContinue = -2,
 	kError = -1,
 	kOk = 0,
 	kWarning = 1
@@ -115,9 +118,12 @@ public:
 * @brief Функция создания детектора yolo: объекта класса IYoloDetector
 * @param [in] config_filepath конфигурационный файл с моделью сети yolo
 * @param [in] weight_filepath файл с весами, соответствующий модели
+* (если требуется только распарсить архитектуру то можно передавать пустую строку или nullptr, в этом случае функция DetectObjects работать не будет)
 * @param [in] name_list_filepath файл с именами классов для разных моделей yolo: coco.names, voc.names, 9k.names
 * @param [in] gpu_id если имеется несколько gpu, то можно указать на каком из них запускать 0,1,2,3..
 * в обычном случае для запуска yolo детектора на gpu по-умолчанию ставят 0
+* @param [in] width_override если >0, то переопределяет ширину входного слоя нейросети, заданную в конфигурации.
+* @param [in] height_override если >0, то переопределяет высоту входного слоя нейросети, заданную в конфигурации.
 * @param [in] params пока не используется, но возможно понадобится в будущем
 * @param [out] i_yolo_detector указатель на класс IYoloDetector, который позволяет
 *                              осуществлять доступ к обнаруженными yolo рамочкам с объектами
@@ -125,7 +131,7 @@ public:
 *			kError, если произошла критическая ошибка (ошибка инициализации)
 *			kWarning, если произошла некритическая ошибка
 */
-extern "C" YOLODLL_API ErrorCode CreateYoloDetector(const char* config_filepath, const char* weight_filepath, const char *name_list_filepath,
-							 int gpu_id, const char* const* params, IYoloDetectorOwned*& i_yolo_detector);
+extern "C" YOLODLL_API ErrorCode CreateYoloDetectorWithSizes(const char* config_filepath, const char* weight_filepath, const char *name_list_filepath,
+							 int gpu_id, int width_override, int height_override, const char* const* params, IYoloDetectorOwned*& i_yolo_detector);
 
 }//namespace yolo_detctor

@@ -1,8 +1,12 @@
+#include <assert.h>
+#include <stdlib.h>
+#include <iostream>
 #include <fstream>
 #include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
+#include <stdexcept>
 #include "YoloDetector.h"
 #include "../../src/yolo_v2_class.hpp"
 extern "C" {
@@ -10,7 +14,16 @@ extern "C" {
 #include "../../src/option_list.h"
 }
 
+
 namespace yolo_detector {
+
+class YoloErrorStateIsUndefinedException : public std::runtime_error
+{
+public:
+	YoloErrorStateIsUndefinedException(const std::string& message):
+		std::runtime_error(("YoloErrorStateIsUndefinedException: " + message))
+	{}
+};
 
 /*! \class YoloDetectorImplementation
 * Класс-обертка над darknet(yolo), скрывающий реализацию доступных для вызова
@@ -20,19 +33,32 @@ class YoloDetectorImplementation : public IYoloDetectorOwned
 {
 public:
 	// \brief Инициализация параметров детектировния: модель, обученные веса, индекс gpu
-	ErrorCode Initialize(const char* config_filepath, const char* weight_filepath, const char *name_list_filepath, int gpu_id)
+	ErrorCode Initialize(const char* config_filepath, const char* weight_filepath, const char *name_list_filepath, int gpu_id, int width_override, int height_override)
 	{
 		try {
+			if (!config_filepath || !name_list_filepath)
+			{
+				throw std::runtime_error("config_filepath and name_list_filepath must be non-nullptr paths");
+			}
 			std::ifstream fin_config(config_filepath);
 			if (!fin_config.is_open())
 				throw std::runtime_error(std::string("Error opening  ") + config_filepath);
-			std::ifstream fin_weight(weight_filepath);
-			if (!fin_weight.is_open())
-				throw std::runtime_error(std::string("Error opening  ") + weight_filepath);
+			std::string weight_filepath_string;
+			if (weight_filepath != nullptr)
+			{
+				weight_filepath_string = weight_filepath;
+			}
+			bool try_load_weights = weight_filepath_string.size() > 0;
+			if (try_load_weights)
+			{
+				std::ifstream fin_weight(weight_filepath_string);
+				if (!fin_weight.is_open())
+					throw std::runtime_error(std::string("Error opening  ") + weight_filepath_string);
+			}
 			std::ifstream fin_name_list(name_list_filepath);
 			if (!fin_name_list.is_open())
 				throw std::runtime_error(std::string("Error opening  ") + name_list_filepath);
-			m_detector_from_darknet.reset(new Detector( config_filepath, weight_filepath, m_net_classes, gpu_id));
+			m_detector_from_darknet.reset(new Detector( config_filepath, weight_filepath_string, m_net_classes, gpu_id, width_override, height_override));
 			list *plist = get_paths(const_cast<char*>(name_list_filepath));
 			m_list_names.reserve(plist->size);
 			for (node * node_it = plist->front; node_it != nullptr; node_it = node_it->next) 
@@ -42,6 +68,15 @@ public:
 			free_list_contents(plist);
 			free_list(plist);
 			if (m_net_classes != m_list_names.size()) throw std::runtime_error("files from different networks");
+			m_weights_loaded = try_load_weights;
+		}
+		catch (const YoloErrorStateIsUndefinedException& error) {
+			//some critical error happened, so the original darknet tried to call exit() for such sitauation,
+			//the most typical is "not enough cuda memory".
+			//This was converted to C++ exception, but internal darknet state is undefinde (maybe huge resource leaks).
+			//So don't try to deallocate m_detector_from_darknet, save error message for logging, and return kCriticalErrorCantContinue
+			m_last_error = error.what();
+			return kCriticalErrorCantContinue;
 		}
 		catch (std::exception& error) {
 			m_detector_from_darknet.reset();
@@ -70,6 +105,11 @@ public:
 	// \brief Выполняет обнаружение объектов на изображеннии с помощью нейронной сети Yolo 
 	virtual ErrorCode DetectObjects(const uint8_t* image, int width, int height, int bpl, int bpp, float threshold, bool use_mean)
 	{
+		if (!m_weights_loaded)
+		{
+			m_last_error = "net was loaded without weights";
+			return kError;
+		}
 		const int net_channels = m_detector_from_darknet->get_net_color_depth();
 		//ожидается, что число каналов во входном изображении будет такое же как заложено в нейросети.
 		//Единственное исключение - при подаче 4-х канальной картинки на вход 3-х канальной сети -
@@ -117,6 +157,14 @@ public:
 				m_current_result[index].feautures = &m_probs[m_list_names.size()*index];
 			}
 			return kOk;
+		}
+		catch (const YoloErrorStateIsUndefinedException& error) {
+			//some critical error happened, so the original darknet tried to call exit() for such sitauation,
+			//the most typical is "not enough cuda memory".
+			//This was converted to C++ exception, but internal darknet state is undefinde (maybe huge resource leaks).
+			//So return kCriticalErrorCantContinue
+			m_last_error = error.what();
+			return kCriticalErrorCantContinue;
 		}
 		catch (std::exception& error) {
 			m_last_error = error.what();
@@ -184,17 +232,18 @@ private:
 	int m_net_classes;
 	// строка содержит последнее сообщение об ошибке, если она есть
 	std::string m_last_error;
+	bool m_weights_loaded = false;
 };
 
 // \brief Функция создания детектора yolo: объекта класса IYoloDetector
-YOLODLL_API ErrorCode CreateYoloDetector(const char* config_filepath, const char* weight_filepath, const char *name_list_filepath,
-								int gpu_id, const char* const* params, IYoloDetectorOwned*& i_yolo_detector)
+YOLODLL_API ErrorCode CreateYoloDetectorWithSizes(const char* config_filepath, const char* weight_filepath, const char *name_list_filepath,
+								int gpu_id, int width_override, int height_override, const char* const* params, IYoloDetectorOwned*& i_yolo_detector)
 {
 	try
 	{
 		YoloDetectorImplementation* result_interface = new YoloDetectorImplementation();
 		i_yolo_detector = nullptr;
-		auto result = result_interface->Initialize(config_filepath, weight_filepath, name_list_filepath, gpu_id);
+		auto result = result_interface->Initialize(config_filepath, weight_filepath, name_list_filepath, gpu_id, width_override, height_override);
 		i_yolo_detector = result_interface;
 		return result;
 	}
@@ -205,3 +254,11 @@ YOLODLL_API ErrorCode CreateYoloDetector(const char* config_filepath, const char
 }
 
 }//namespace yolo_detector
+
+extern "C" void report_uncontinuable_error_throw(const char* reason, const char* details)
+{
+	std::string error_string = reason + std::string(" ") + details;
+	std::cerr << error_string << std::endl;
+	assert(0);
+	throw yolo_detector::YoloErrorStateIsUndefinedException(error_string);
+}

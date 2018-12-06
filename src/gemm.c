@@ -1614,6 +1614,25 @@ void convolution_2d(int w, int h, int ksize, int n, int c, int pad, int stride,
     }
 }
 
+static inline int popcnt_64(uint64_t val64) {
+#ifdef WIN32  // Windows
+#ifdef _WIN64 // Windows 64-bit
+	int tmp_count = __popcnt64(val64);
+#else         // Windows 32-bit
+	int tmp_count = __popcnt(val64);
+	tmp_count += __popcnt(val64 >> 32);
+#endif
+#else   // Linux
+#ifdef __x86_64__  // Linux 64-bit
+	int tmp_count = __builtin_popcountll(val64);
+#else  // Linux 32-bit
+	int tmp_count = __builtin_popcount(val64);
+	tmp_count += __builtin_popcount(val64);
+#endif
+#endif
+	return tmp_count;
+}
+
 void gemm_nn_custom_bin_mean_transposed(int M, int N, int K, float ALPHA_UNUSED,
     unsigned char *A, int lda,
     unsigned char *B, int ldb,
@@ -1634,11 +1653,7 @@ void gemm_nn_custom_bin_mean_transposed(int M, int N, int K, float ALPHA_UNUSED,
                 uint64_t b_bit64 = *((uint64_t *)(B + (j*ldb + k) / 8));
                 uint64_t c_bit64 = xnor_int64(a_bit64, b_bit64);
 
-#ifdef WIN32
-                int tmp_count = __popcnt64(c_bit64);
-#else
-                int tmp_count = __builtin_popcountll(c_bit64);
-#endif
+                int tmp_count = popcnt_64(c_bit64);
 
                 if (K - k < 64)  tmp_count = tmp_count - (64 - (K - k));    // remove extra bits
                 count += tmp_count;
@@ -2071,12 +2086,12 @@ void gemm_ongpu(int TA, int TB, int M, int N, int K, float ALPHA,
         float *A_gpu, int lda,
         float *B_gpu, int ldb,
         float BETA,
-        float *C_gpu, int ldc)
+        float *C_gpu, int ldc, void* cublas_handle)
 {
-    cublasHandle_t handle = blas_handle();
+    cublasHandle_t handle = cublas_handle;
     cudaError_t stream_status = cublasSetStream(handle, get_cuda_stream());
     cudaError_t status = cublasSgemm(handle, (TB ? CUBLAS_OP_T : CUBLAS_OP_N),
-            (TA ? CUBLAS_OP_T : CUBLAS_OP_N), N, M, K, &ALPHA, B_gpu, ldb, A_gpu, lda, &BETA, C_gpu, ldc);
+           (TA ? CUBLAS_OP_T : CUBLAS_OP_N), N, M, K, &ALPHA, B_gpu, ldb, A_gpu, lda, &BETA, C_gpu, ldc);
     check_error(status);
 }
 
@@ -2090,7 +2105,7 @@ void gemm_gpu(int TA, int TB, int M, int N, int K, float ALPHA,
     float *B_gpu = cuda_make_array(B, (TB ? ldb*N : ldb*K));
     float *C_gpu = cuda_make_array(C, ldc*M);
 
-    gemm_ongpu(TA, TB, M, N, K, ALPHA, A_gpu, lda, B_gpu, ldb, BETA, C_gpu, ldc);
+    gemm_ongpu(TA, TB, M, N, K, ALPHA, A_gpu, lda, B_gpu, ldb, BETA, C_gpu, ldc, blas_handle());
 
     cuda_pull_array(C_gpu, C, ldc*M);
     cuda_free(A_gpu);
@@ -2145,7 +2160,7 @@ void time_ongpu(int TA, int TB, int m, int k, int n)
     int i;
     clock_t start = clock(), end;
     for(i = 0; i<iter; ++i){
-        gemm_ongpu(TA,TB,m,n,k,1,a_cl,lda,b_cl,ldb,1,c_cl,n);
+        gemm_ongpu(TA,TB,m,n,k,1,a_cl,lda,b_cl,ldb,1,c_cl,n, blas_handle());
         cudaThreadSynchronize();
     }
     double flop = ((double)m)*n*(2.*k + 2.)*iter;

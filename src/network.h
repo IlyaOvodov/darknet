@@ -19,6 +19,7 @@ typedef enum {
 
 typedef struct network{
     float *workspace;
+    void *cublas_handle;
     int n;
     int batch;
 	int *seen;
